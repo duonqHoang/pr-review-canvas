@@ -10,6 +10,7 @@ import {
   flagValue,
   hasFlag,
   normalizeArgv,
+  sessionUpsertPayload,
 } from "../src/cli.js";
 
 test("flagValue reads both --flag value and --flag=value", () => {
@@ -103,6 +104,16 @@ test("createOpenOutput reports the ref, the key and the canonical identity", () 
     number: 219,
     url: "https://github.com/KunChenGuid/lavish-axi/pull/219",
   });
+});
+
+test("the session open POSTs carries the GitHub PR URL, not the canvas URL", () => {
+  const ref = { host: "github.com", owner: "KunChenGuid", repo: "lavish-axi", number: 219 };
+  const body = sessionUpsertPayload({ ref, key: "k", accessId: "a", headSha: "h", localRepo: "/cwd" });
+  // "Open on GitHub" renders `session.pr.url`; if this ever becomes the local canvas URL again, the
+  // toolbar link opens the canvas instead of the PR.
+  assert.equal(body.url, "https://github.com/KunChenGuid/lavish-axi/pull/219");
+  assert.equal(body.displayRef, "KunChenGuid/lavish-axi#219");
+  assert.equal(body.reopen, true);
 });
 
 test("createStopOutput wraps the server report", () => {
