@@ -115,7 +115,8 @@ export function createSkillMarkdown() {
 
   return `---
 name: ${SKILL_NAME}
-description: ${SKILL_DESCRIPTION}
+description: >-
+  ${SKILL_DESCRIPTION}
 argument-hint: <pull request URL, owner/repo#123, or a PR number>
 metadata:
   tags: [github, pull-request, code-review, diff]

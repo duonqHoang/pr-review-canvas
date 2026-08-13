@@ -1,6 +1,7 @@
 ---
 name: pr-review-canvas
-description: Review a GitHub pull request together with the user in a local GitHub-styled canvas: they highlight lines to ask you questions inline and draft their own review comments, then the whole review is posted to GitHub in one atomic call when they approve it. Use ONLY when the user explicitly asks for this canvas — `/pr-review-canvas`, "review canvas", "pr-review-canvas", "open the PR diff in my browser", "let's review this PR together in the canvas". Do NOT use for an ordinary review request such as "review this PR", "review my diff", "review the code", or a security/audit pass — those are reviews you write yourself, with no canvas.
+description: >-
+  Review a GitHub pull request together with the user in a local GitHub-styled canvas: they highlight lines to ask you questions inline and draft their own review comments, then the whole review is posted to GitHub in one atomic call when they approve it. Use ONLY when the user explicitly asks for this canvas — `/pr-review-canvas`, "review canvas", "pr-review-canvas", "open the PR diff in my browser", "let's review this PR together in the canvas". Do NOT use for an ordinary review request such as "review this PR", "review my diff", "review the code", or a security/audit pass — those are reviews you write yourself, with no canvas.
 argument-hint: <pull request URL, owner/repo#123, or a PR number>
 metadata:
   tags: [github, pull-request, code-review, diff]
