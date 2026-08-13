@@ -1,0 +1,2007 @@
+/*
+ * Hand-written, no framework. GitHub's look is a specific set of colours and a specific type
+ * scale; ~400 lines of CSS is both smaller and more faithful than bending a utility framework.
+ *
+ * Token layer first, then regions top to bottom. Light and dark are both first-class: reviewers
+ * read code all day and half of them use light, so lavish's dark-only choice is not copied.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --prc-fg: #1f2328;
+  --prc-fg-muted: #59636e;
+  --prc-fg-subtle: #818b98;
+  --prc-bg: #ffffff;
+  --prc-bg-inset: #f6f8fa;
+  --prc-bg-elevated: #ffffff;
+  --prc-border: #d1d9e0;
+  --prc-border-muted: #e5e9ee;
+  --prc-accent: #0969da;
+  --prc-accent-fg: #ffffff;
+  --prc-danger: #cf222e;
+  --prc-success: #1a7f37;
+  /* Warning, not error: a drifted anchor is something to decide about, not something that broke.
+     Both values clear 4.5:1 on the elevated background they are used on — tokens.test.js pins it. */
+  --prc-attention: #9a6700;
+
+  --prc-diff-add-bg: #e6ffec;
+  --prc-diff-add-num-bg: #ccffd8;
+  --prc-diff-del-bg: #ffebe9;
+  --prc-diff-del-num-bg: #ffd7d5;
+  --prc-diff-expanded-bg: #f6f8fa;
+
+  --prc-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --prc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --prc-text-sm: 12px;
+  --prc-text: 14px;
+  --prc-code: 12px;
+  /* Deliberately larger than --prc-code. The tree is navigation, and navigation is scanned from the
+     corner of the eye while the code holds the reader's attention; at the same size as the diff it
+     competed with it and read as more content to get through. */
+  --prc-tree-text: 13px;
+  --prc-lh-code: 20px;
+
+  --prc-radius: 6px;
+  --prc-space-1: 4px;
+  --prc-space-2: 8px;
+  --prc-space-3: 12px;
+  --prc-space-4: 16px;
+  --prc-header-h: 52px;
+  /* The real height of the sticky chrome, measured by the client on load and on resize. The literal
+     here is only a fallback: the page header holds the pull request's title, and a long title wraps,
+     so its height is not knowable from CSS. Sticking the file headers at a guessed offset is what hid
+     the first rows of every table — the hunk header and the expand band — behind it. */
+  --prc-chrome-h: 52px;
+  /* Where the toolbar sticks: the measured height of the header above it. Same arrangement as
+     --prc-chrome-h — the literal is a pre-measurement fallback, not a claim about the real height. */
+  --prc-toolbar-top: 52px;
+  /* The fixed review bar's height, measured by the client for the same reason as the two above: it
+     wraps on a narrow window. Anything sticky has to stop short of it, or it covers the bottom of that
+     column — which is where the chat's Send button lives. */
+  --prc-footer-h: 44px;
+  /* Where the sticky columns begin: measured, because a banner above them moves it. Their heights are
+     computed from this rather than from their sticky offset — before the first scroll the two differ, and
+     using the offset made the panels overhang the review bar. */
+  --prc-aside-top: 150px;
+  --prc-tree-w: 280px;
+  --prc-chat-w: 360px;
+  --prc-cursor: #0969da;
+}
+
+/* Dark, twice. The media block is for the reader who has not chosen — their OS decides, and the
+   `:not` stops it from overruling someone who picked light explicitly. The block after it is for the
+   reader who has chosen. CSS cannot join a media-scoped selector to an unscoped one, so the palette
+   is stated twice and tokens.test.js asserts the two declare exactly the same tokens with the same
+   values: the duplication is checked rather than merely regretted. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --prc-fg: #e6edf3;
+    --prc-fg-muted: #9198a1;
+    --prc-fg-subtle: #6e7681;
+    --prc-bg: #0d1117;
+    --prc-bg-inset: #151b23;
+    --prc-bg-elevated: #151b23;
+    --prc-border: #3d444d;
+    --prc-border-muted: #262c36;
+    --prc-accent: #4493f8;
+    --prc-danger: #f85149;
+    --prc-success: #3fb950;
+    --prc-attention: #d29922;
+
+    --prc-diff-add-bg: #12261e;
+    /* Darker than GitHub's own tint on purpose: the line number sitting on it has to clear 4.5:1
+       against --prc-fg-muted, and GitHub's value does not (3.66:1). tokens.test.js pins this. */
+    --prc-diff-add-num-bg: #123016;
+    --prc-diff-del-bg: #25171c;
+    --prc-diff-del-num-bg: #451d1f;
+    --prc-diff-expanded-bg: #151b23;
+    --prc-cursor: #4493f8;
+  }
+}
+
+:root[data-theme="dark"] {
+  --prc-fg: #e6edf3;
+  --prc-fg-muted: #9198a1;
+  --prc-fg-subtle: #6e7681;
+  --prc-bg: #0d1117;
+  --prc-bg-inset: #151b23;
+  --prc-bg-elevated: #151b23;
+  --prc-border: #3d444d;
+  --prc-border-muted: #262c36;
+  --prc-accent: #4493f8;
+  --prc-danger: #f85149;
+  --prc-success: #3fb950;
+  --prc-attention: #d29922;
+
+  --prc-diff-add-bg: #12261e;
+  --prc-diff-add-num-bg: #123016;
+  --prc-diff-del-bg: #25171c;
+  --prc-diff-del-num-bg: #451d1f;
+  --prc-diff-expanded-bg: #151b23;
+  --prc-cursor: #4493f8;
+}
+
+/* Form controls and scrollbars are drawn by the browser, not by this stylesheet, so the chosen theme
+   has to be declared to it as well or a dark page keeps a white select and a light scrollbar. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* The browser's own rule for `[hidden]` is `display: none`, which any class that sets `display` beats
+   on specificity — so a panel the client hides by setting `.hidden = true` stays on screen. That is
+   what left an empty "0 drafts" heading above the file tree. Stated once, with the weight to win,
+   rather than remembered separately in every component that hides itself. */
+[hidden] {
+  display: none !important;
+}
+
+body.prc {
+  margin: 0;
+  font: var(--prc-text) / 1.5 var(--prc-font);
+  color: var(--prc-fg);
+  background: var(--prc-bg);
+  /* Clearance for the fixed review bar, from the same measured value the sticky columns use — a literal
+     here and a measured one there is how the two disagree on a narrow window. */
+  padding-bottom: calc(var(--prc-footer-h) + var(--prc-space-4));
+}
+
+.prc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.prc-skip {
+  position: absolute;
+  left: -9999px;
+}
+.prc-skip:focus {
+  left: var(--prc-space-2);
+  top: var(--prc-space-2);
+  z-index: 30;
+  background: var(--prc-bg-elevated);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+}
+
+.prc-spacer {
+  flex: 1;
+}
+
+/* ---- header and toolbar ---- */
+
+.prc-header,
+.prc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-3);
+  padding: var(--prc-space-2) var(--prc-space-4);
+  border-bottom: 1px solid var(--prc-border);
+  background: var(--prc-bg);
+}
+
+.prc-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: var(--prc-header-h);
+}
+
+/* The toolbar sticks below the header, so the layout toggle, the file filter and the chat button stay
+   reachable however far down the diff you are. Its offset is measured rather than assumed: the header
+   holds the pull request title, which wraps on a narrow window, so its height is not knowable here. */
+.prc-toolbar {
+  position: sticky;
+  top: var(--prc-toolbar-top);
+  z-index: 9;
+}
+
+.prc-pr-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  /* One line, ellipsised. A wrapping title silently grows the sticky header and pushes every offset
+     below it out of true. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prc-pr-num {
+  color: var(--prc-fg-muted);
+  font-weight: 400;
+}
+
+.prc-state {
+  font-size: var(--prc-text-sm);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--prc-success);
+  color: #fff;
+}
+
+.prc-refs code {
+  font: var(--prc-text-sm) / 1 var(--prc-mono);
+  background: var(--prc-bg-inset);
+  padding: 2px 6px;
+  border-radius: var(--prc-radius);
+}
+
+.prc-counts ins {
+  color: var(--prc-success);
+  text-decoration: none;
+}
+.prc-counts del {
+  color: var(--prc-danger);
+  text-decoration: none;
+}
+
+.prc-link {
+  color: var(--prc-accent);
+}
+
+.prc-presence {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+}
+.prc-presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--prc-fg-subtle);
+}
+.prc-presence[data-state="listening"] .prc-presence-dot {
+  background: var(--prc-success);
+}
+.prc-presence[data-state="working"] .prc-presence-dot {
+  background: var(--prc-accent);
+  animation: prc-pulse 1.2s infinite;
+}
+@keyframes prc-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prc-presence[data-state="working"] .prc-presence-dot {
+    animation: none;
+  }
+  /* The caret still turns, it just turns instantly. */
+  .prc-file-fold {
+    transition: none;
+  }
+}
+
+.prc-banner {
+  padding: var(--prc-space-2) var(--prc-space-4);
+  background: var(--prc-bg-inset);
+  border-bottom: 1px solid var(--prc-border);
+  font-size: var(--prc-text-sm);
+}
+.prc-banner-attention {
+  border-left: 3px solid var(--prc-accent);
+}
+/* A session alert means something about this review has stopped working — a merged PR, a lost login.
+   Louder than the attention banner because there is nothing the user can do inside the page to fix
+   it, so it has to be read rather than noticed. */
+.prc-banner-alert {
+  border-left: 3px solid var(--prc-attention);
+  color: var(--prc-attention);
+}
+
+/* ---- file panels ---- */
+
+.prc-layout {
+  padding: var(--prc-space-4);
+  display: grid;
+  grid-template-columns: var(--prc-tree-w) minmax(0, 1fr);
+  gap: var(--prc-space-4);
+  align-items: start;
+}
+.prc-layout[data-tree="closed"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.prc-layout[data-tree="closed"] .prc-tree {
+  display: none;
+}
+/* Four combinations of two toggles, spelled out. A calc() over custom properties would be shorter and
+   would also make the grid unreadable at exactly the moment someone needs to reason about it. */
+.prc-layout[data-chat="open"] {
+  grid-template-columns: var(--prc-tree-w) minmax(0, 1fr) var(--prc-chat-w);
+}
+.prc-layout[data-tree="closed"][data-chat="open"] {
+  grid-template-columns: minmax(0, 1fr) var(--prc-chat-w);
+}
+
+/* ---- the chat panel ----
+   Sticky and self-scrolling like the tree, so the conversation stays put while the diff moves. */
+
+.prc-chat {
+  position: sticky;
+  top: calc(var(--prc-chrome-h) + var(--prc-space-4));
+  max-height: calc(100vh - var(--prc-aside-top) - var(--prc-footer-h) - var(--prc-space-4));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  font-size: var(--prc-text-sm);
+  min-width: 0;
+}
+
+.prc-chat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  padding: var(--prc-space-2);
+  border-bottom: 1px solid var(--prc-border-muted);
+}
+
+.prc-chat-log {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: var(--prc-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--prc-space-2);
+}
+
+.prc-chat-empty {
+  margin: 0;
+  color: var(--prc-fg-muted);
+}
+
+.prc-chat-msg {
+  padding: var(--prc-space-2);
+  border-radius: var(--prc-radius);
+  border-left: 3px solid var(--prc-border);
+  background: var(--prc-bg-inset);
+  /* A long path or an unbroken token must not widen the panel and push the diff around. */
+  overflow-wrap: anywhere;
+}
+.prc-chat-msg[data-role="user"] {
+  border-left-color: var(--prc-accent);
+}
+.prc-chat-msg[data-role="agent"] {
+  border-left-color: var(--prc-success);
+}
+.prc-chat-msg[data-pending="1"] {
+  opacity: 0.65;
+}
+
+.prc-chat-who {
+  display: block;
+  margin-bottom: var(--prc-space-1);
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+}
+
+.prc-chat-foot {
+  padding: var(--prc-space-2);
+  border-top: 1px solid var(--prc-border-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--prc-space-2);
+}
+
+.prc-chat-text {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  color: var(--prc-fg);
+  background: var(--prc-bg);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-2);
+}
+
+.prc-chat-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+}
+
+.prc-chat-hint {
+  flex: 1;
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+}
+
+/* A line reference inside a message. Reads as a link but is a button, because there is no URL for a
+   row that may not be mounted yet. */
+/* A rendered diagram. Scrolls inside its own box rather than widening the panel it sits in: a chat
+   column is 360px and a sequence diagram is not. */
+.prc-diagram {
+  position: relative;
+  margin: var(--prc-space-2) 0;
+  padding: var(--prc-space-2);
+  overflow-x: auto;
+  background: var(--prc-bg-inset);
+  border: 1px solid var(--prc-border-muted);
+  border-radius: var(--prc-radius);
+}
+
+/* Sticky rather than absolute: the figure scrolls horizontally, and an absolutely positioned control
+   would slide out of view with the diagram exactly when it is needed. */
+.prc-diagram-zoom {
+  position: sticky;
+  left: calc(100% - 24px);
+  float: right;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  color: var(--prc-fg-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.prc-diagram-zoom:hover {
+  color: var(--prc-fg);
+  background: var(--prc-bg-inset);
+}
+
+/* The enlarged view. Sized from the viewport rather than from the diagram, so the picture is as big as
+   the screen allows and the aspect ratio comes from the SVG's own viewBox. */
+/* Both classes in the selector, not for emphasis but for weight: `.prc-dialog` sets `max-width: 520px`
+   and is declared later in this file, so a single-class override would lose and the enlarged view would
+   be no wider than the shortcuts dialog. */
+.prc-dialog.prc-zoom {
+  max-width: 94vw;
+  width: auto;
+  max-height: 92vh;
+  padding: 0;
+}
+.prc-zoom-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  padding: var(--prc-space-2) var(--prc-space-3);
+  border-bottom: 1px solid var(--prc-border-muted);
+}
+.prc-zoom-title {
+  color: var(--prc-fg-muted);
+}
+.prc-zoom-body {
+  padding: var(--prc-space-3);
+  overflow: auto;
+  max-height: calc(92vh - 48px);
+}
+/* Width-driven, with the height following from the viewBox. Sizing by height instead left a short, wide
+   diagram sitting in a tall empty box: the SVG scales to fit its viewport box, so the leftover height was
+   blank space rather than a bigger picture. */
+.prc-zoom-body svg {
+  display: block;
+  width: 88vw;
+  height: auto;
+  max-height: 78vh;
+}
+/* Natural size, and scroll if that does not fit. Fitting a 1200px sequence diagram into a 360px chat
+   column scaled the text to a quarter of its size and made the picture useless — a diagram nobody can
+   read is worse than the fence it replaced. `useMaxWidth: false` in the mermaid entry is the other half
+   of this. */
+.prc-diagram svg {
+  max-width: none;
+  height: auto;
+  display: block;
+}
+
+/* Mermaid's colours arrive as an inline <style> block, which the CSP forbids and the sanitiser drops —
+   so a rendered diagram reaches the page with class names and no rules, and every shape falls back to
+   black on black. These are those rules, written against the page's own tokens.
+   CSS beats presentation attributes, so this also overrides whatever the mermaid theme baked in, and a
+   diagram follows the light/dark toggle without being rendered again. */
+.prc-mermaid .node rect,
+.prc-mermaid .node circle,
+.prc-mermaid .node ellipse,
+.prc-mermaid .node polygon,
+.prc-mermaid .node path,
+.prc-mermaid .cluster rect,
+.prc-mermaid .actor,
+.prc-mermaid .labelBox,
+.prc-mermaid .note {
+  fill: var(--prc-bg);
+  stroke: var(--prc-border);
+  stroke-width: 1px;
+}
+/* Colour only. The type is set in the mermaid entry, because mermaid measures text to size its boxes
+   and aim its arrows — restyling it here made the arrows miss and run through the labels. */
+.prc-mermaid text,
+.prc-mermaid .messageText,
+.prc-mermaid .labelText,
+.prc-mermaid .loopText,
+.prc-mermaid .noteText,
+.prc-mermaid text.actor {
+  fill: var(--prc-fg);
+  stroke: none;
+}
+
+/* Centring, not decoration. Mermaid puts a node's label at the centre of the box and relies on
+   `text-anchor: middle` from its own stylesheet to make the glyphs grow both ways from there. Without
+   the rule the label starts at the centre and runs out through the right-hand edge, with the arrow
+   crossing the words — which is exactly how this looked before the rule existed. */
+.prc-mermaid .node .label text,
+.prc-mermaid .cluster-label text,
+.prc-mermaid .edgeLabel text,
+.prc-mermaid .flowchartTitleText {
+  text-anchor: middle;
+}
+/* Edge labels sit on the line, so they need the panel's own background behind them to stay legible. */
+.prc-mermaid .edgeLabel rect,
+.prc-mermaid .edgeLabel .label-container {
+  fill: var(--prc-bg-inset);
+  stroke: none;
+}
+.prc-mermaid .edgePath .path,
+.prc-mermaid .flowchart-link,
+.prc-mermaid .messageLine0,
+.prc-mermaid .loopLine,
+.prc-diagram line.actor-line {
+  stroke: var(--prc-fg-muted);
+  fill: none;
+  stroke-width: 1.5px;
+}
+/* A dashed message is a reply in a sequence diagram; the distinction is the whole point of it. */
+.prc-mermaid .messageLine1 {
+  stroke: var(--prc-fg-muted);
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 3;
+}
+.prc-mermaid .marker,
+.prc-mermaid marker path,
+.prc-mermaid .arrowheadPath,
+.prc-mermaid .arrowMarkerPath {
+  fill: var(--prc-fg-muted);
+  stroke: none;
+}
+.prc-mermaid .activation0,
+.prc-mermaid .activation1,
+.prc-mermaid .activation2 {
+  fill: var(--prc-bg-inset);
+  stroke: var(--prc-border);
+}
+
+.prc-jump {
+  font: inherit;
+  font-family: var(--prc-mono);
+  font-size: 0.95em;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--prc-bg-inset);
+  color: var(--prc-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prc-jump:hover {
+  background: var(--prc-border-muted);
+}
+
+/* Where a jump landed. A flash rather than a persistent mark: it answers "which row?" and then gets
+   out of the way, and it must never be mistaken for a selection the user made. */
+.prc-flash .prc-code {
+  animation: prc-flash 1.2s ease-out;
+}
+@keyframes prc-flash {
+  from {
+    background: var(--prc-cursor);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prc-flash .prc-code {
+    animation: none;
+    outline: 2px solid var(--prc-cursor);
+    outline-offset: -2px;
+  }
+}
+
+/* ---- the drafts index ----
+   Above the file tree, because the most common reason to look at this column mid-review is "take me
+   back to what I wrote". */
+
+.prc-drafts {
+  border-bottom: 1px solid var(--prc-border-muted);
+  /* Its own scroll, so a long list of drafts cannot push the file tree out of the panel. */
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.prc-drafts-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+  width: 100%;
+  padding: var(--prc-space-2);
+  border: 0;
+  background: none;
+  color: var(--prc-fg-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prc-drafts-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+.prc-drafts-head[aria-expanded="false"] .prc-drafts-caret {
+  transform: rotate(-90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .prc-drafts-caret {
+    transition: none;
+  }
+}
+
+.prc-drafts-list {
+  margin: 0;
+  padding: 0 var(--prc-space-2) var(--prc-space-2);
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.prc-draft-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: var(--prc-space-1) var(--prc-space-2);
+  border: 0;
+  border-left: 3px solid var(--prc-accent);
+  border-radius: var(--prc-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.prc-draft-row:hover {
+  background: var(--prc-bg-inset);
+}
+.prc-draft-row[data-stale="1"] {
+  border-left-color: var(--prc-attention);
+}
+
+.prc-draft-row-where {
+  font-family: var(--prc-mono);
+  font-size: 11px;
+  color: var(--prc-fg-muted);
+}
+
+.prc-draft-row-text {
+  /* One line. A draft can be several paragraphs, and this is an index, not a preview pane. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prc-badge-stale {
+  color: var(--prc-attention);
+}
+
+/* ---- the file tree ---- */
+
+.prc-tree {
+  position: sticky;
+  top: calc(var(--prc-chrome-h) + var(--prc-space-4));
+  max-height: calc(100vh - var(--prc-aside-top) - var(--prc-footer-h) - var(--prc-space-4));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  font-size: var(--prc-tree-text);
+  min-width: 0;
+}
+
+.prc-tree-head {
+  padding: var(--prc-space-2);
+  border-bottom: 1px solid var(--prc-border-muted);
+}
+
+.prc-tree-filter {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  padding: var(--prc-space-1) var(--prc-space-2);
+  background: var(--prc-bg-inset);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+}
+
+.prc-tree-body {
+  overflow: auto;
+  flex: 1;
+  /* Without this a flex item refuses to shrink below its content, so a long file tree would push the
+     drafts index out of the panel instead of scrolling inside its own box. */
+  min-height: 0;
+  padding: var(--prc-space-1);
+}
+
+.prc-tree-foot {
+  padding: var(--prc-space-2);
+  border-top: 1px solid var(--prc-border-muted);
+  color: var(--prc-fg-muted);
+}
+
+.prc-tree-empty {
+  margin: var(--prc-space-2);
+  color: var(--prc-fg-muted);
+}
+
+.prc-tree-file,
+.prc-tree-dirname {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--prc-radius);
+  padding: 2px var(--prc-space-1);
+  cursor: pointer;
+}
+.prc-tree-file:hover,
+.prc-tree-dirname:hover {
+  background: var(--prc-bg-inset);
+}
+
+.prc-tree-label {
+  flex: 1;
+  min-width: 0;
+  /* The end of a path identifies it, so the middle is what gets sacrificed. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.prc-tree-dirname .prc-tree-label {
+  direction: ltr;
+  color: var(--prc-fg-muted);
+}
+
+.prc-tree-stat,
+.prc-tree-count {
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.prc-tree-marks {
+  display: flex;
+  gap: 2px;
+}
+
+.prc-tree-file[data-viewed="1"] .prc-tree-label {
+  color: var(--prc-fg-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--prc-border);
+}
+
+.prc-tree-file[data-unavailable="1"] .prc-tree-label {
+  font-style: italic;
+}
+
+.prc-tree-children {
+  margin-left: var(--prc-space-3);
+  border-left: 1px solid var(--prc-border-muted);
+  padding-left: var(--prc-space-1);
+}
+
+/* A 16px box for both the caret and the file glyph. The caret was a 10px text arrow, which is below
+   the size at which a rotation reads as a direction — it looked like a smudge next to the label. */
+.prc-tree-caret,
+.prc-tree-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.prc-tree-caret {
+  color: var(--prc-fg-subtle);
+}
+.prc-tree-dirname[aria-expanded="false"] .prc-tree-caret {
+  transform: rotate(-90deg);
+}
+
+/* Colour carries the status, the glyph carries the kind, and the +/− counts stay authoritative for
+   size — so a reader who cannot separate green from red loses nothing that is only in the colour. */
+.prc-tree-icon {
+  color: var(--prc-fg-muted);
+}
+.prc-tree-icon[data-status="added"] {
+  color: var(--prc-success);
+}
+.prc-tree-icon[data-status="removed"] {
+  color: var(--prc-danger);
+}
+.prc-tree-icon[data-status="renamed"],
+.prc-tree-icon[data-status="copied"] {
+  color: var(--prc-attention);
+}
+
+.prc-chip-draft,
+.prc-chip-question,
+.prc-chip-viewed {
+  min-width: 16px;
+  text-align: center;
+}
+.prc-chip-viewed {
+  color: var(--prc-success);
+}
+
+/* ---- the layout switch ---- */
+
+.prc-segmented {
+  display: flex;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  overflow: hidden;
+}
+
+.prc-seg {
+  font: inherit;
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+  background: var(--prc-bg);
+  border: 0;
+  padding: var(--prc-space-1) var(--prc-space-2);
+  cursor: pointer;
+}
+.prc-seg + .prc-seg {
+  border-left: 1px solid var(--prc-border);
+}
+.prc-seg[aria-pressed="true"] {
+  background: var(--prc-bg-inset);
+  color: var(--prc-fg);
+  font-weight: 600;
+}
+
+.prc-file {
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  margin-bottom: var(--prc-space-4);
+  /* `clip`, never `hidden`. Both clip the table's corners to the radius, but `hidden` establishes a
+     **scroll container** — and `position: sticky` resolves against the nearest scroll container, not
+     the viewport. So with `hidden` here, the sticky `.prc-file-header` was offset by its `top` value
+     *inside this box*: pushed permanently down over the first rows of its own table, leaving a band of
+     empty space above the diff and hiding the hunk range and the expand-up band behind it.
+     `overflow: clip` creates no scroll container, so the header sticks to the viewport as intended.
+     Where `clip` is unsupported the declaration is dropped, which loses the rounded corners and keeps
+     the correct behaviour — the right way round. */
+  overflow: clip;
+}
+
+.prc-file-header {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-3);
+  padding: var(--prc-space-2) var(--prc-space-3);
+  background: var(--prc-bg-inset);
+  border-bottom: 1px solid var(--prc-border);
+  font-size: var(--prc-text-sm);
+  position: sticky;
+  top: var(--prc-chrome-h);
+  z-index: 5;
+}
+
+.prc-file-path {
+  font: var(--prc-text-sm) / 1 var(--prc-mono);
+  background: none;
+  border: 0;
+  color: var(--prc-fg);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.prc-file-path:hover {
+  background: var(--prc-border-muted);
+}
+
+.prc-file-diffstat ins {
+  color: var(--prc-success);
+  text-decoration: none;
+}
+.prc-file-diffstat del {
+  color: var(--prc-danger);
+  text-decoration: none;
+}
+
+.prc-file-status {
+  color: var(--prc-fg-muted);
+}
+
+.prc-viewed {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+  color: var(--prc-fg-muted);
+  cursor: pointer;
+}
+
+.prc-file[data-state="pending"] .prc-file-body::after,
+.prc-file[data-state="loading"] .prc-file-body::after {
+  content: "Loading diff…";
+  display: block;
+  padding: var(--prc-space-4);
+  color: var(--prc-fg-subtle);
+  font-size: var(--prc-text-sm);
+}
+
+.prc-file-unavailable {
+  padding: var(--prc-space-4);
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+}
+
+/* ---- folding ---- */
+
+.prc-file {
+  /* The sticky header and toolbar would otherwise cover the top of a file jumped to from the tree
+     or with `n`. */
+  scroll-margin-top: calc(var(--prc-chrome-h) + var(--prc-space-2));
+}
+
+.prc-line,
+.prc-hunk {
+  /* Both the page chrome and the file's own header are sticky, so a row scrolled to must clear both or
+     it lands underneath them. */
+  scroll-margin-top: calc(var(--prc-chrome-h) + 40px);
+}
+
+.prc-file-fold {
+  /* Same reasoning as the expand controls: a caret glyph with no padding is a 6-pixel target. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  font-size: 14px;
+  /* The rotation needs a centre to turn about that does not drift as the glyph's box changes. */
+  transform-origin: 50% 50%;
+  transition: transform 120ms ease;
+  font: 13px/1 var(--prc-font);
+  color: var(--prc-fg-muted);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+.prc-file-fold:hover {
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+}
+.prc-file-fold:focus-visible {
+  outline: 2px solid var(--prc-accent);
+  outline-offset: -2px;
+}
+.prc-file-fold[aria-expanded="false"] {
+  transform: rotate(-90deg);
+}
+
+.prc-file[data-collapsed="1"] .prc-file-body,
+.prc-file[data-collapsed="1"] .prc-file-threads {
+  display: none;
+}
+/* Collapsed means read, so the loading placeholder must not claim otherwise. */
+.prc-file[data-collapsed="1"] .prc-file-header {
+  border-bottom: 0;
+}
+
+/* ---- conversations with no line to sit on ---- */
+
+.prc-file-threads {
+  padding: var(--prc-space-2) var(--prc-space-3);
+  background: var(--prc-bg-inset);
+  border-bottom: 1px solid var(--prc-border-muted);
+}
+
+.prc-file-threads-head {
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+  margin-bottom: var(--prc-space-2);
+}
+
+/* ---- the diff table ---- */
+
+.prc-diff {
+  width: 100%;
+  border-collapse: collapse;
+  /* Non-negotiable, not a perf tweak: it is what stops a thread row's spanning cell from
+     disturbing the gutter column widths. */
+  table-layout: fixed;
+  font: var(--prc-code) / var(--prc-lh-code) var(--prc-mono);
+  tab-size: 4;
+}
+
+.prc-col-num {
+  width: 50px;
+}
+
+.prc-num {
+  width: 50px;
+  min-width: 50px;
+  text-align: right;
+  padding: 0 var(--prc-space-2) 0 0;
+  /* Muted, not subtle: a line number is text, so it owes 4.5:1 against every background it can sit
+     on — including the tinted add/del number cells, where subtle managed only 2.3:1 in dark. */
+  color: var(--prc-fg-muted);
+  background: var(--prc-bg-inset);
+  vertical-align: top;
+  position: relative;
+  /* Keeps line numbers out of the clipboard when code is copied across rows. */
+  user-select: none;
+}
+.prc-num::before {
+  content: attr(data-n);
+}
+.prc-num-empty::before {
+  content: "";
+}
+
+.prc-code {
+  padding: 0 var(--prc-space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.prc-marker {
+  user-select: none;
+  color: var(--prc-fg-subtle);
+  /* A gap between the marker and the code, in character widths so it scales with the font. Margin
+     rather than a padding character: the marker is `user-select: none`, so anything added as *text*
+     would be excluded from a copy while a real space would not, and the clipboard has to contain the
+     source line exactly. A context line's marker is a space and gets the same margin, so every line
+     stays aligned. */
+  margin-right: 0.5ch;
+}
+
+.prc-line-add .prc-code {
+  background: var(--prc-diff-add-bg);
+}
+.prc-line-add .prc-num-new {
+  background: var(--prc-diff-add-num-bg);
+}
+.prc-line-del .prc-code {
+  background: var(--prc-diff-del-bg);
+}
+.prc-line-del .prc-num-old {
+  background: var(--prc-diff-del-num-bg);
+}
+
+/* Expanded context: readable but not commentable, signalled four independent ways so the
+   distinction survives colour blindness and screen readers. */
+.prc-line-locked .prc-code {
+  background: var(--prc-diff-expanded-bg);
+  color: var(--prc-fg-muted);
+}
+.prc-line-locked .prc-num {
+  color: var(--prc-fg-subtle);
+}
+.prc-line-locked + .prc-line:not(.prc-line-locked) .prc-code {
+  border-top: 1px solid var(--prc-border-muted);
+}
+
+.prc-hunk td {
+  background: var(--prc-bg-inset);
+  color: var(--prc-fg-muted);
+  padding: var(--prc-space-1) var(--prc-space-2);
+  border-top: 1px solid var(--prc-border-muted);
+  border-bottom: 1px solid var(--prc-border-muted);
+  user-select: none;
+}
+
+.prc-expand {
+  padding: 0 !important;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* An expand band: one above the hunk, one below, identical to each other. Slimmer than the range
+   header because it carries a single button and nothing else — and identical in both directions
+   because an arrow crammed next to the `@@` text reads as decoration while one alone on a band reads
+   as something to press. */
+.prc-hunk-band td {
+  padding: 0 !important;
+  height: 20px;
+}
+
+/* The whole band responds, not just the glyph: the button stretches across the gutter, and hovering
+   anywhere on the band tints it so the target is obvious before you commit to clicking. */
+.prc-hunk-band:hover .prc-expand-btn {
+  background: color-mix(in srgb, var(--prc-accent) 18%, transparent);
+}
+
+/* Sized as a real control rather than a glyph. At the old size these were a few pixels of clickable
+   area inside a 16px row, which is a target you have to aim at — on the one gesture a reader repeats
+   dozens of times while reading a diff. */
+.prc-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 28px;
+  min-height: 20px;
+  font: 13px/1 var(--prc-font);
+  color: var(--prc-accent);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+.prc-expand-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--prc-accent) 18%, transparent);
+}
+.prc-expand-btn:focus-visible {
+  outline: 2px solid var(--prc-accent);
+  outline-offset: -2px;
+}
+.prc-expand-btn:disabled {
+  color: var(--prc-fg-subtle);
+  cursor: progress;
+}
+
+/* ---- split view ----
+   One table, four columns. Two synchronised tables would break selection across the sides and
+   drift out of alignment as soon as one side wrapped; a single table gets row-height pairing for
+   free from the table layout algorithm. `table-layout: fixed` above is what keeps the two code
+   columns exactly equal regardless of content. */
+
+.prc-diff-split .prc-col-num {
+  width: 44px;
+}
+
+.prc-diff-split .prc-code {
+  /* Each code column takes half of what is left, so a long line wraps rather than stealing width
+     from the other side. */
+  max-width: 0;
+}
+
+.prc-code-blank {
+  background: var(--prc-bg-inset);
+}
+
+.prc-code-add {
+  background: var(--prc-diff-add-bg);
+}
+.prc-code-del {
+  background: var(--prc-diff-del-bg);
+}
+
+.prc-line-pair .prc-num-old:not(.prc-num-empty) {
+  border-right: 1px solid transparent;
+}
+.prc-pair-both .prc-num-old,
+.prc-pair-del .prc-num-old {
+  background: var(--prc-diff-del-num-bg);
+}
+.prc-pair-both .prc-num-new,
+.prc-pair-add .prc-num-new {
+  background: var(--prc-diff-add-num-bg);
+}
+
+/* The divider between the two halves. */
+.prc-diff-split .prc-num-new {
+  border-left: 1px solid var(--prc-border);
+}
+
+/* A mirrored context cell shows the line but offers nothing: comments on a context line go to the
+   new side, so a + here would file against a different number than the one displayed. */
+.prc-code[data-mirror="1"] {
+  color: var(--prc-fg-muted);
+}
+
+/* ---- the selected range ----
+   Selecting four lines and seeing nothing change was the most disorienting part of the old gesture:
+   the only feedback was a line number in the composer header, which is not where the eye is. It also
+   makes a *trimmed* range legible — you can see it stop at a hunk boundary. */
+
+/* Marked per **cell**, not per row: a split row holds two different lines, and highlighting the row
+   would claim the other side was selected too. Both classes are set explicitly by the client rather
+   than derived with `:has()`, so which gutter lights up follows the selected side rather than
+   whichever column happens to sit next to the code. */
+.prc-code.prc-selected,
+.prc-num.prc-selected-num {
+  /* An overlay rather than a background, so the add/del tint underneath still shows through — the
+     selection must not hide whether a line was added or removed. */
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--prc-accent) 12%, transparent);
+}
+
+.prc-num.prc-selected-num {
+  box-shadow:
+    inset 2px 0 0 var(--prc-accent),
+    inset 0 0 0 999px color-mix(in srgb, var(--prc-accent) 12%, transparent);
+}
+
+/* The gutter is draggable, so say so on hover and keep the pointer from looking like a text caret. */
+.prc-num:not(.prc-num-empty) {
+  cursor: ns-resize;
+}
+
+/* Except where it cannot be: the left gutter of a mirrored context row in split view. A context line
+   is commentable on the new side only, so this gutter resolves to nothing — and offering a drag
+   cursor over rows that will not respond is what made split view feel broken. */
+.prc-num:has(+ .prc-code[data-mirror="1"]) {
+  cursor: default;
+}
+
+/* While a drag is in progress nothing else should look selectable. */
+body.prc-dragging {
+  user-select: none;
+}
+
+/* A trimmed range is stated in words, and marked, because the count differing from what the user
+   dragged is otherwise indistinguishable from a bug. */
+.prc-composer-where[data-trimmed="1"] {
+  color: var(--prc-danger);
+}
+
+/* ---- the keyboard cursor ---- */
+
+.prc-cursor td {
+  box-shadow: inset 0 -1px 0 var(--prc-cursor);
+}
+.prc-cursor .prc-num:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--prc-cursor),
+    inset 0 -1px 0 var(--prc-cursor);
+}
+
+.prc-noeol {
+  color: var(--prc-danger);
+  padding-left: var(--prc-space-1);
+}
+
+/* ---- the + affordance ---- */
+
+.prc-plus {
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--prc-accent);
+  color: var(--prc-accent-fg);
+  cursor: pointer;
+  opacity: 0;
+  font-size: 14px;
+}
+.prc-line:hover .prc-plus,
+.prc-plus:focus-visible {
+  opacity: 1;
+}
+
+/* ---- threads, drafts and the composer ---- */
+
+.prc-thread-cell {
+  padding: var(--prc-space-2) var(--prc-space-3);
+  background: var(--prc-bg);
+  border-top: 1px solid var(--prc-border-muted);
+  border-bottom: 1px solid var(--prc-border-muted);
+}
+
+.prc-thread-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--prc-space-2);
+  font-family: var(--prc-font);
+  font-size: var(--prc-text);
+}
+
+.prc-composer,
+.prc-draft,
+.prc-qa,
+.prc-existing,
+.prc-queued-reply,
+.prc-reply {
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-2);
+  background: var(--prc-bg-elevated);
+}
+
+.prc-draft {
+  border-left: 3px solid var(--prc-accent);
+}
+.prc-draft-submitted {
+  border-left-color: var(--prc-success);
+}
+/* A drifted draft reads as unfinished business rather than as an error: it is still the user's
+   comment, it just needs a decision before it can be part of a review. */
+.prc-draft-stale {
+  border-left-color: var(--prc-attention);
+  border-left-style: dashed;
+}
+
+.prc-drift {
+  display: flex;
+  flex-direction: column;
+  gap: var(--prc-space-1);
+  margin-bottom: var(--prc-space-2);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-attention);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg-inset);
+}
+
+.prc-drift-text {
+  margin: 0;
+  font-size: var(--prc-text-sm);
+  color: var(--prc-attention);
+}
+
+.prc-drift-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--prc-space-2);
+}
+
+.prc-drift-candidates {
+  margin: 0;
+  padding-left: var(--prc-space-3);
+  font-family: var(--prc-mono);
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+  /* File content, so it must not be re-wrapped into something that looks like different code. */
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ---- existing PR threads ----
+   Visually the quietest layer on purpose: it is context that already exists, not something the user
+   is composing. A muted rail keeps it distinct from both a draft (accent) and a Q&A thread. */
+
+.prc-existing {
+  border-left: 3px solid var(--prc-border);
+  background: var(--prc-bg-inset);
+}
+.prc-existing[data-resolved="1"] {
+  opacity: 0.7;
+}
+.prc-existing[data-outdated="1"] {
+  border-left-style: dashed;
+}
+
+.prc-existing-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+}
+
+.prc-badge-existing {
+  color: var(--prc-fg-subtle);
+}
+
+.prc-chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--prc-border);
+  color: var(--prc-fg-muted);
+}
+.prc-chip-resolved {
+  border-color: var(--prc-success);
+  color: var(--prc-success);
+}
+.prc-chip-outdated {
+  border-style: dashed;
+}
+
+.prc-existing-link {
+  color: var(--prc-accent);
+  font-size: var(--prc-text-sm);
+}
+
+.prc-existing-msg {
+  display: flex;
+  gap: var(--prc-space-2);
+  margin-top: var(--prc-space-2);
+}
+
+.prc-existing-author {
+  flex: 0 0 8rem;
+  font-size: var(--prc-text-sm);
+  font-weight: 600;
+  color: var(--prc-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.prc-existing-body {
+  white-space: pre-wrap;
+  color: var(--prc-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A queued reply is not a draft: it posts separately and cannot be withdrawn once sent. */
+.prc-queued-reply {
+  margin-top: var(--prc-space-2);
+  border-left: 3px solid var(--prc-accent);
+}
+.prc-queued-posted {
+  border-left-color: var(--prc-success);
+}
+.prc-queued-failed {
+  border-left-color: var(--prc-danger);
+}
+
+.prc-queued-error {
+  margin-top: var(--prc-space-1);
+  font-size: 11px;
+  color: var(--prc-danger);
+  white-space: pre-wrap;
+}
+
+/* ---- Q&A threads ----
+   A left rail distinguishes a conversation with the agent from a draft comment bound for GitHub.
+   Confusing the two would be the worst possible mistake in this UI, so they never share a colour. */
+
+.prc-qa {
+  border-left: 3px solid var(--prc-fg-subtle);
+}
+.prc-qa[data-status="answered"] {
+  border-left-color: var(--prc-success);
+}
+.prc-qa[data-status="dismissed"] {
+  opacity: 0.6;
+}
+
+.prc-qa-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+}
+
+.prc-badge-qa {
+  color: var(--prc-fg-muted);
+}
+
+.prc-qa-note {
+  font-size: 11px;
+  color: var(--prc-fg-subtle);
+}
+
+.prc-qa-msg {
+  display: flex;
+  gap: var(--prc-space-2);
+  margin-top: var(--prc-space-2);
+}
+
+.prc-qa-role {
+  flex: 0 0 3.5rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--prc-fg-subtle);
+  padding-top: 2px;
+}
+
+.prc-qa-text {
+  /* pre-wrap, not a markdown render: an answer is plain text until the markdown layer lands, and
+     showing it verbatim is honest rather than half-parsed. */
+  white-space: pre-wrap;
+  color: var(--prc-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.prc-qa-agent .prc-qa-text {
+  border-left: 2px solid var(--prc-border-muted);
+  padding-left: var(--prc-space-2);
+}
+
+.prc-qa-pending {
+  margin-top: var(--prc-space-2);
+  font-size: 11px;
+  color: var(--prc-fg-subtle);
+}
+
+.prc-reply-text {
+  width: 100%;
+  margin-bottom: var(--prc-space-2);
+  font: var(--prc-text) / 1.5 var(--prc-font);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+  resize: vertical;
+}
+
+.prc-draft-head,
+.prc-composer-head,
+.prc-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+}
+
+.prc-draft-body {
+  white-space: pre-wrap;
+  margin-top: var(--prc-space-1);
+  color: var(--prc-fg);
+}
+
+.prc-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--prc-accent);
+}
+
+.prc-composer-text {
+  width: 100%;
+  margin: var(--prc-space-2) 0;
+  font: var(--prc-text) / 1.5 var(--prc-font);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+  resize: vertical;
+}
+
+.prc-hint {
+  font-size: 11px;
+  color: var(--prc-fg-subtle);
+}
+
+/* ---- composer mode switch (Comment / Ask agent) ---- */
+
+.prc-modes {
+  display: inline-flex;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  overflow: hidden;
+}
+
+.prc-mode {
+  font: var(--prc-text-sm) / 1 var(--prc-font);
+  padding: 5px 10px;
+  border: 0;
+  background: var(--prc-bg-inset);
+  color: var(--prc-fg-muted);
+  cursor: pointer;
+}
+.prc-mode + .prc-mode {
+  border-left: 1px solid var(--prc-border);
+}
+.prc-mode-on {
+  background: var(--prc-bg-elevated);
+  color: var(--prc-fg);
+  font-weight: 600;
+}
+
+.prc-composer-where,
+.prc-composer-from {
+  font-size: 11px;
+  color: var(--prc-fg-subtle);
+}
+.prc-composer-from {
+  font-style: italic;
+}
+
+/* ---- suggestion builder ----
+   The editor and the preview use the code font, because what is being edited is source, and
+   proportional text would hide the whitespace that decides whether the patch applies. */
+
+.prc-suggest {
+  margin-bottom: var(--prc-space-2);
+}
+
+.prc-suggest-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--prc-space-2);
+  font-size: 11px;
+  color: var(--prc-fg-muted);
+  margin-bottom: 4px;
+}
+
+.prc-suggest-meta {
+  color: var(--prc-fg-subtle);
+}
+
+.prc-suggest-text {
+  width: 100%;
+  font: var(--prc-code) / var(--prc-lh-code) var(--prc-mono);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+  resize: vertical;
+  tab-size: 8;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.prc-suggest-preview {
+  margin-top: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  overflow: hidden;
+}
+
+.prc-suggest-preview pre {
+  margin: 0;
+  padding: 2px var(--prc-space-2);
+  font: var(--prc-code) / var(--prc-lh-code) var(--prc-mono);
+  overflow-x: auto;
+  tab-size: 8;
+}
+
+.prc-suggest-old {
+  background: var(--prc-diff-del-bg);
+  color: var(--prc-fg);
+}
+.prc-suggest-new {
+  background: var(--prc-diff-add-bg);
+  color: var(--prc-fg);
+  border-top: 1px solid var(--prc-border);
+}
+.prc-suggest-empty {
+  color: var(--prc-fg-subtle);
+  font-style: italic;
+}
+
+.prc-badge-suggest {
+  color: var(--prc-success);
+}
+
+.prc-banner-agent {
+  border-left: 3px solid var(--prc-fg-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+}
+
+/* An unread count on the toggle, so a reply is noticeable without the notice being the only signal. */
+#prcToggleChat[data-unread]::after {
+  content: attr(data-unread);
+  margin-left: var(--prc-space-1);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--prc-accent);
+  color: var(--prc-accent-fg);
+  font-size: 10px;
+}
+
+/* ---- buttons ---- */
+
+.prc-btn {
+  font: var(--prc-text-sm) / 1 var(--prc-font);
+  padding: 6px 12px;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg-inset);
+  color: var(--prc-fg);
+  cursor: pointer;
+}
+.prc-btn:hover:not(:disabled) {
+  background: var(--prc-border-muted);
+}
+.prc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.prc-btn-primary {
+  background: var(--prc-accent);
+  border-color: var(--prc-accent);
+  color: var(--prc-accent-fg);
+}
+.prc-btn-quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--prc-fg-muted);
+}
+
+.prc-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+}
+.prc-theme-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* Fixed, so cycling Auto → Light → Dark does not shuffle everything to its left along the toolbar. */
+.prc-theme-label {
+  min-width: 3.2em;
+  text-align: left;
+}
+
+/* ---- review bar and dialog ---- */
+
+.prc-reviewbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-3);
+  padding: var(--prc-space-2) var(--prc-space-4);
+  background: var(--prc-bg-elevated);
+  border-top: 1px solid var(--prc-border);
+  font-size: var(--prc-text-sm);
+  z-index: 15;
+}
+
+/* `margin-left: auto` rather than a spacer element, so the summary and Submit keep the positions
+   reviewers already know and only this control moves to the corner. */
+.prc-reviewbar-end {
+  margin-left: auto;
+}
+
+.prc-dialog {
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg-elevated);
+  color: var(--prc-fg);
+  max-width: 520px;
+  width: 90vw;
+  padding: var(--prc-space-4);
+}
+.prc-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.prc-dialog h2 {
+  margin: 0 0 var(--prc-space-2);
+  font-size: 16px;
+}
+
+.prc-field {
+  display: block;
+  margin: var(--prc-space-3) 0;
+}
+.prc-field span {
+  display: block;
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+  margin-bottom: var(--prc-space-1);
+}
+.prc-field textarea {
+  width: 100%;
+  font: var(--prc-text) / 1.5 var(--prc-font);
+  padding: var(--prc-space-2);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+  resize: vertical;
+}
+
+.prc-verdicts {
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-2);
+}
+.prc-verdicts legend {
+  font-size: var(--prc-text-sm);
+  color: var(--prc-fg-muted);
+  padding: 0 var(--prc-space-1);
+}
+.prc-verdicts label {
+  display: block;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.prc-dialog-note {
+  color: var(--prc-danger);
+  font-size: var(--prc-text-sm);
+  min-height: 1em;
+}
+
+.prc-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--prc-space-2);
+}
+
+/* ---- toasts ---- */
+
+.prc-toasts {
+  position: fixed;
+  bottom: 56px;
+  right: var(--prc-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--prc-space-2);
+  z-index: 20;
+}
+.prc-toast {
+  background: var(--prc-fg);
+  color: var(--prc-bg);
+  padding: var(--prc-space-2) var(--prc-space-3);
+  border-radius: var(--prc-radius);
+  font-size: var(--prc-text-sm);
+  max-width: 360px;
+}
+
+/* ---- rendered markdown ----
+   Comment bodies, agent answers, and existing PR conversation. Spacing is tight on purpose: these
+   sit inside a diff row, where a normal document's vertical rhythm would push the code apart. */
+
+.prc-md > *:first-child {
+  margin-top: 0;
+}
+.prc-md > *:last-child {
+  margin-bottom: 0;
+}
+
+.prc-md p,
+.prc-md ul,
+.prc-md ol,
+.prc-md blockquote,
+.prc-md pre {
+  margin: 0 0 var(--prc-space-2);
+}
+
+.prc-md h3,
+.prc-md h4,
+.prc-md h5,
+.prc-md h6 {
+  margin: var(--prc-space-3) 0 var(--prc-space-1);
+  font-size: var(--prc-text);
+  font-weight: 600;
+}
+
+.prc-md ul,
+.prc-md ol {
+  padding-left: var(--prc-space-4);
+}
+
+.prc-md li + li {
+  margin-top: 2px;
+}
+
+.prc-md code {
+  font: var(--prc-code) / 1.4 var(--prc-mono);
+  background: var(--prc-bg-inset);
+  border: 1px solid var(--prc-border-muted);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.prc-md pre {
+  background: var(--prc-bg-inset);
+  border: 1px solid var(--prc-border-muted);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-2);
+  /* A long line in a fenced block scrolls inside its own box rather than widening the diff row. */
+  overflow-x: auto;
+}
+
+.prc-md pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  white-space: pre;
+}
+
+.prc-md blockquote {
+  border-left: 3px solid var(--prc-border);
+  padding-left: var(--prc-space-3);
+  color: var(--prc-fg-muted);
+}
+
+.prc-md a {
+  color: var(--prc-accent);
+}
+
+.prc-md hr {
+  border: 0;
+  border-top: 1px solid var(--prc-border-muted);
+  margin: var(--prc-space-3) 0;
+}
+
+/* ---- the shortcuts list ---- */
+
+.prc-keys {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--prc-space-1) var(--prc-space-3);
+  margin: var(--prc-space-3) 0;
+  font-size: var(--prc-text-sm);
+}
+.prc-keys dt {
+  white-space: nowrap;
+}
+.prc-keys dd {
+  margin: 0;
+  color: var(--prc-fg-muted);
+}
+
+kbd {
+  font: 11px var(--prc-mono);
+  border: 1px solid var(--prc-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: var(--prc-bg-inset);
+}
+
+@media (max-width: 1000px) {
+  /* The tree costs more than it gives once the diff itself is narrow. */
+  .prc-layout,
+  .prc-layout[data-chat="open"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prc-tree {
+    display: none;
+  }
+  /* The chat drops below the diff rather than disappearing: it was opened deliberately, and hiding
+     something the user asked for is worse than making them scroll to it. */
+  .prc-chat {
+    position: static;
+    max-height: 60vh;
+  }
+}
+
+@media (max-width: 720px) {
+  .prc-header,
+  .prc-toolbar {
+    flex-wrap: wrap;
+  }
+  .prc-layout {
+    padding: var(--prc-space-2);
+  }
+  /* Side by side does not fit; the unified table still does. */
+  .prc-diff-split .prc-col-num {
+    width: 32px;
+  }
+  .prc-num,
+  .prc-col-num {
+    width: 38px;
+    min-width: 38px;
+  }
+}

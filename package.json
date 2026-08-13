@@ -1,0 +1,61 @@
+{
+  "name": "pr-review-canvas",
+  "version": "0.1.0",
+  "description": "Review a GitHub PR in a local GitHub-styled diff canvas, ask your agent inline, and submit the whole review with gh.",
+  "type": "module",
+  "bin": {
+    "pr-review-canvas": "dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "skills/pr-review-canvas",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "check": "npm run build && node scripts/build-skill.js --check && npm run lint && npm run format:check && npm run typecheck && npm test",
+    "start": "node dist/cli.mjs",
+    "lint": "eslint bin src scripts test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "prepare": "node scripts/build.js",
+    "build:skill": "node scripts/build-skill.js",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "axi-sdk-js": "0.1.8",
+    "express": "^5.2.1",
+    "open": "^10.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.2",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.6.0",
+    "highlight.js": "^11.11.1",
+    "mermaid": "^11.16.1",
+    "parse5": "^8.0.1",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "github",
+    "pull-request",
+    "code-review",
+    "agent",
+    "axi",
+    "diff"
+  ],
+  "license": "MIT"
+}

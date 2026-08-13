@@ -1,0 +1,138 @@
+/*
+ * Syntax colours.
+ *
+ * One rule here is not a style choice but a correctness constraint, and it is the first thing in the
+ * file for that reason:
+ *
+ *   **No `.hljs-*` class may set a background.**
+ *
+ * The background of a code cell is what tells the reader whether a line was added, removed or left
+ * alone. Every off-the-shelf highlight theme paints backgrounds on at least a few token types, and
+ * each one of those punches a hole in the diff's own colouring — so the palette below is
+ * foreground-only, and tokens.test.js asserts that no background creeps back in.
+ *
+ * The colours themselves follow GitHub's, so a reviewer moving between this and the real thing is not
+ * relearning what a keyword looks like.
+ */
+
+:root {
+  --prc-hl-keyword: #cf222e;
+  --prc-hl-string: #0a3069;
+  --prc-hl-comment: #57606a;
+  --prc-hl-number: #0550ae;
+  --prc-hl-function: #8250df;
+  --prc-hl-type: #953800;
+  --prc-hl-variable: #953800;
+  --prc-hl-meta: #0550ae;
+  --prc-hl-invalid: #82071e;
+}
+
+/* Dark, twice: once for the reader who has not chosen (their OS decides, and the `:not` keeps an
+   explicit light choice from being overruled by it), once for the reader who has. CSS cannot join a
+   media-scoped selector to an unscoped one, so the palette is stated twice and tokens.test.js
+   asserts the two are identical — the duplication is checked rather than merely regretted. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --prc-hl-keyword: #ff7b72;
+    --prc-hl-string: #a5d6ff;
+    --prc-hl-comment: #9198a1;
+    --prc-hl-number: #79c0ff;
+    --prc-hl-function: #d2a8ff;
+    --prc-hl-type: #ffa657;
+    --prc-hl-variable: #ffa657;
+    --prc-hl-meta: #79c0ff;
+    --prc-hl-invalid: #ffa198;
+  }
+}
+
+:root[data-theme="dark"] {
+  --prc-hl-keyword: #ff7b72;
+  --prc-hl-string: #a5d6ff;
+  --prc-hl-comment: #9198a1;
+  --prc-hl-number: #79c0ff;
+  --prc-hl-function: #d2a8ff;
+  --prc-hl-type: #ffa657;
+  --prc-hl-variable: #ffa657;
+  --prc-hl-meta: #79c0ff;
+  --prc-hl-invalid: #ffa198;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name,
+.hljs-subst {
+  color: var(--prc-hl-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--prc-hl-string);
+}
+
+.hljs-comment,
+.hljs-quote,
+.hljs-deletion {
+  color: var(--prc-hl-comment);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--prc-hl-number);
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--prc-hl-function);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: var(--prc-hl-type);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--prc-hl-variable);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: var(--prc-hl-meta);
+}
+
+/* A grammar can mark a construct invalid — common in a diff, where a hunk starts mid-expression. It
+   must read as ordinary code rather than as an error the reviewer should act on. */
+.hljs-invalid {
+  color: inherit;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* Markdown and diff grammars want to shout; inside a diff cell that is noise. */
+.hljs-section,
+.hljs-title {
+  font-weight: inherit;
+}

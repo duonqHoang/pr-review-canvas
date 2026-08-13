@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# Build
+node_modules/
+dist/
+build/
+*.log
+
+# Generated browser bundles. They are built into src/ rather than dist/ because the server reads its
+# assets relative to its own directory, which is src/ when running from source.
+src/client/prc-client.js
+src/client/prc-client.js.map
+# The syntax-highlighting worker, with highlight.js and its grammars vendored in (~167 kB minified).
+src/client/prc-hl-worker.js
+src/client/prc-mermaid.js

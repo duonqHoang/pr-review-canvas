@@ -1,0 +1,8 @@
+dist/
+node_modules/
+test/fixtures/
+package-lock.json
+src/client/prc-client.js
+src/client/prc-client.js.map
+src/client/prc-hl-worker.js
+src/client/prc-mermaid.js
