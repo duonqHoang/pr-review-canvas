@@ -73,6 +73,14 @@ test("the skill tells the agent to invoke through npx, not a global install", as
   assert.match(skill, /does not need to be installed globally/i);
 });
 
+test("the skill frontmatter is YAML-safe for `npx skills add`", async () => {
+  const skill = await readFile(skillPath, "utf8");
+  // `npx skills add` parses the frontmatter as YAML; a bare `description: …canvas: they…` is read as
+  // a nested mapping and the whole skill is silently dropped ("No skills found"). The folded scalar
+  // keeps the description one logical line, so a colon anywhere in it cannot split the mapping.
+  assert.match(skill, /description: >-/);
+});
+
 test("the skill states the rule the whole tool exists to enforce", async () => {
   const skill = await readFile(skillPath, "utf8");
   // Not a style check. An agent that reads this file and still drafts the review has defeated the
