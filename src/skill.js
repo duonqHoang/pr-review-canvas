@@ -17,6 +17,12 @@ import { BIN, createHomeOutput, DESCRIPTION } from "./cli.js";
 export const SKILL_NAME = BIN;
 
 /**
+ * How an agent invokes the CLI: through `npx -y` so the tool works with no global install, and `-y` so
+ * the interactive "Ok to proceed?" prompt cannot stall a non-interactive agent.
+ */
+export const INVOKE = `npx -y ${BIN}`;
+
+/**
  * What an agent matches on to decide this skill applies.
  *
  * Deliberately explicit-only. The canvas inverts who writes the review, so loading it for an ordinary
@@ -104,7 +110,7 @@ export const AGENT_RULES = [
 export function createSkillMarkdown() {
   const home = createHomeOutput();
   const commands = Object.entries(/** @type {Record<string, string>} */ (home.commands)).map(
-    ([usage, what]) => `\`${usage}\` — ${what}`,
+    ([usage, what]) => `\`${usage.replace(BIN, INVOKE)}\` — ${what}`,
   );
 
   return `---
@@ -120,6 +126,14 @@ metadata:
 
 ${DESCRIPTION}
 
+## How to invoke
+
+Run the tool with \`${INVOKE} <pr>\` — it does not need to be installed globally. If a command's output
+shows a follow-up starting with \`${BIN}\`, run it as \`${INVOKE} …\` instead. In a sandbox where
+\`npx -y\` exits opaquely (for example status 216), use an installed copy directly:
+\`node "$(npm root -g)/${BIN}/dist/cli.mjs" <pr>\` after \`npm install -g ${BIN}\`, or the bare \`${BIN}\`
+bin.
+
 ## When to use this skill
 
 ${bullets(SKILL_SCOPE)}
@@ -129,23 +143,23 @@ ${bullets(SKILL_SCOPE)}
 $ARGUMENTS
 
 If the request above names a pull request, open it now with the workflow below. If it is empty, ask
-the user which PR they mean, or run \`${BIN} open\` to use the one for the current branch.
+the user which PR they mean, or run \`${INVOKE} open\` to use the one for the current branch.
 
 ## Workflow
 
-1. \`${BIN} <pr>\` — fetches the diff and opens the review canvas in the user's browser. Give them the
+1. \`${INVOKE} <pr>\` — fetches the diff and opens the review canvas in the user's browser. Give them the
    URL it prints; they may already be looking at it.
-2. \`${BIN} poll <pr>\` — waits for them. This blocks, silently, until they ask something or click
+2. \`${INVOKE} poll <pr>\` — waits for them. This blocks, silently, until they ask something or click
    Submit. Leave it running.
 3. When a question arrives, answer it with
-   \`${BIN} answer <pr> --thread <id> --body-file -\` and the answer on stdin. Stdin is the documented
+   \`${INVOKE} answer <pr> --thread <id> --body-file -\` and the answer on stdin. Stdin is the documented
    path because an answer contains backticks and code fences, which do not survive a shell argument
    reliably. The answer appears inline under that line of the diff without a reload.
-4. When \`poll\` returns \`action: submit_requested\`, run \`${BIN} submit <pr> --token <token>\`
+4. When \`poll\` returns \`action: submit_requested\`, run \`${INVOKE} submit <pr> --token <token>\`
    immediately. One atomic POST creates the review with every comment the user approved.
-5. Poll again if they are still reviewing. \`${BIN} end <pr>\` when they are done.
+5. Poll again if they are still reviewing. \`${INVOKE} end <pr>\` when they are done.
 
-If the user says the author has pushed, run \`${BIN} refresh <pr>\`. It re-fetches the diff and
+If the user says the author has pushed, run \`${INVOKE} refresh <pr>\`. It re-fetches the diff and
 re-checks every draft's anchor; anything it cannot place with certainty is held out of the submission
 and surfaced in the browser for the user to accept or reject. Report the list and wait — moving their
 comment is their decision, not yours.

@@ -65,6 +65,14 @@ test("the skill documents every command an agent is meant to run", async () => {
   }
 });
 
+test("the skill tells the agent to invoke through npx, not a global install", async () => {
+  const skill = await readFile(skillPath, "utf8");
+  // The skill is what an agent reads when the tool is installed via `npx skills add`, so it has to
+  // carry the invocation form itself: a bare `pr-review-canvas` only works after a global install.
+  assert.match(skill, /npx -y pr-review-canvas/);
+  assert.match(skill, /does not need to be installed globally/i);
+});
+
 test("the skill states the rule the whole tool exists to enforce", async () => {
   const skill = await readFile(skillPath, "utf8");
   // Not a style check. An agent that reads this file and still drafts the review has defeated the

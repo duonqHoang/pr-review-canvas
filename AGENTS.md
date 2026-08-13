@@ -16,7 +16,7 @@ npm test             # node --test, no framework; needs a build first
 node bin/pr-review-canvas.js 219   # run from source
 ```
 
-There is no CI workflow. `.github/` holds only CODEOWNERS and a PR template, so `npm run check` is the
+There is no CI workflow, so `npm run check` is the
 only gate — run it before saying a change is done. Comments in the codebase that say "checked in CI" mean
 `scripts/build-skill.js --check` inside that script.
 
