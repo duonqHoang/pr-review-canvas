@@ -26,8 +26,17 @@ agent: pr-review-canvas submit 219 --token …   → one POST, review live on Gi
 ## Install
 
 ```sh
+npx skills add duonqHoang/pr-review-canvas -g -y
+```
+
+Your agent then invokes the tool itself with `npx -y pr-review-canvas …`, fetching the package on
+demand — no global install needed. Installing globally and wiring the SessionStart hook is optional;
+it surfaces the tool as ambient context at the start of every session for Claude Code, Codex and
+OpenCode:
+
+```sh
 npm install -g pr-review-canvas
-pr-review-canvas setup hooks   # tell your agent harness the tool exists
+pr-review-canvas setup hooks   # optional: ambient context, not required
 ```
 
 Run `setup hooks` against the **installed** binary, not a clone. It only writes hooks when it can
@@ -37,10 +46,10 @@ checkout does nothing — and still reports success.
 ## Use it
 
 ```sh
-pr-review-canvas 219                       # a PR number, from inside the repository
-pr-review-canvas owner/repo#219            # or a full reference, from anywhere
-pr-review-canvas https://github.com/o/r/pull/219/files
-pr-review-canvas open                      # the PR for the current branch
+npx -y pr-review-canvas 219                # a PR number, from inside the repository
+npx -y pr-review-canvas owner/repo#219     # or a full reference, from anywhere
+npx -y pr-review-canvas https://github.com/o/r/pull/219/files
+npx -y pr-review-canvas open               # the PR for the current branch
 ```
 
 A PR opened from a fork always resolves to the **base** repository, because that is where the pull

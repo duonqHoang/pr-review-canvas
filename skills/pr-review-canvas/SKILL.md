@@ -11,6 +11,14 @@ metadata:
 
 Review a GitHub PR in a local GitHub-styled diff canvas: ask your agent inline, draft comments, and submit the whole review with gh.
 
+## How to invoke
+
+Run the tool with `npx -y pr-review-canvas <pr>` — it does not need to be installed globally. If a command's output
+shows a follow-up starting with `pr-review-canvas`, run it as `npx -y pr-review-canvas …` instead. In a sandbox where
+`npx -y` exits opaquely (for example status 216), use an installed copy directly:
+`node "$(npm root -g)/pr-review-canvas/dist/cli.mjs" <pr>` after `npm install -g pr-review-canvas`, or the bare `pr-review-canvas`
+bin.
+
 ## When to use this skill
 
 - **Use it when** the user named this canvas — `/pr-review-canvas`, "review canvas", "open the PR diff in my browser" — or asked to review a PR _together_ so they can comment on the lines themselves.
@@ -22,23 +30,23 @@ Review a GitHub PR in a local GitHub-styled diff canvas: ask your agent inline, 
 $ARGUMENTS
 
 If the request above names a pull request, open it now with the workflow below. If it is empty, ask
-the user which PR they mean, or run `pr-review-canvas open` to use the one for the current branch.
+the user which PR they mean, or run `npx -y pr-review-canvas open` to use the one for the current branch.
 
 ## Workflow
 
-1. `pr-review-canvas <pr>` — fetches the diff and opens the review canvas in the user's browser. Give them the
+1. `npx -y pr-review-canvas <pr>` — fetches the diff and opens the review canvas in the user's browser. Give them the
    URL it prints; they may already be looking at it.
-2. `pr-review-canvas poll <pr>` — waits for them. This blocks, silently, until they ask something or click
+2. `npx -y pr-review-canvas poll <pr>` — waits for them. This blocks, silently, until they ask something or click
    Submit. Leave it running.
 3. When a question arrives, answer it with
-   `pr-review-canvas answer <pr> --thread <id> --body-file -` and the answer on stdin. Stdin is the documented
+   `npx -y pr-review-canvas answer <pr> --thread <id> --body-file -` and the answer on stdin. Stdin is the documented
    path because an answer contains backticks and code fences, which do not survive a shell argument
    reliably. The answer appears inline under that line of the diff without a reload.
-4. When `poll` returns `action: submit_requested`, run `pr-review-canvas submit <pr> --token <token>`
+4. When `poll` returns `action: submit_requested`, run `npx -y pr-review-canvas submit <pr> --token <token>`
    immediately. One atomic POST creates the review with every comment the user approved.
-5. Poll again if they are still reviewing. `pr-review-canvas end <pr>` when they are done.
+5. Poll again if they are still reviewing. `npx -y pr-review-canvas end <pr>` when they are done.
 
-If the user says the author has pushed, run `pr-review-canvas refresh <pr>`. It re-fetches the diff and
+If the user says the author has pushed, run `npx -y pr-review-canvas refresh <pr>`. It re-fetches the diff and
 re-checks every draft's anchor; anything it cannot place with certainty is held out of the submission
 and surfaced in the browser for the user to accept or reject. Report the list and wait — moving their
 comment is their decision, not yours.
@@ -60,14 +68,14 @@ comment is their decision, not yours.
 
 ## Commands
 
-- `pr-review-canvas <pr>` — Open or resume a review session for a PR (URL, `owner/repo#123`, or `123` inside the repo).
-- `pr-review-canvas poll <pr>` — Long-poll until the user asks something or clicks Submit.
-- `pr-review-canvas answer <pr> --thread <id>` — Answer one of the user's questions; it appears inline under that line of the diff.
-- `pr-review-canvas submit <pr> --token <t>` — Submit the review the user approved in the browser.
-- `pr-review-canvas refresh <pr>` — Re-fetch after the author pushes and re-check every draft's anchor. Nothing is moved without the user.
-- `pr-review-canvas end <pr>` — End the review session as the agent.
-- `pr-review-canvas server` — Run the local review server (normally spawned automatically).
-- `pr-review-canvas stop` — Shut down the background server.
+- `npx -y pr-review-canvas <pr>` — Open or resume a review session for a PR (URL, `owner/repo#123`, or `123` inside the repo).
+- `npx -y pr-review-canvas poll <pr>` — Long-poll until the user asks something or clicks Submit.
+- `npx -y pr-review-canvas answer <pr> --thread <id>` — Answer one of the user's questions; it appears inline under that line of the diff.
+- `npx -y pr-review-canvas submit <pr> --token <t>` — Submit the review the user approved in the browser.
+- `npx -y pr-review-canvas refresh <pr>` — Re-fetch after the author pushes and re-check every draft's anchor. Nothing is moved without the user.
+- `npx -y pr-review-canvas end <pr>` — End the review session as the agent.
+- `npx -y pr-review-canvas server` — Run the local review server (normally spawned automatically).
+- `npx -y pr-review-canvas stop` — Shut down the background server.
 
 ## Requirements
 
