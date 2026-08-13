@@ -26,7 +26,7 @@ agent: pr-review-canvas submit 219 --token …   → one POST, review live on Gi
 ## Install
 
 ```sh
-npx skills add duonqHoang/pr-review-canvas -g -y
+npx skills add duonqHoang/pr-review-canvas
 ```
 
 Your agent then invokes the tool itself with `npx -y pr-review-canvas …`, fetching the package on
