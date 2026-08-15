@@ -472,6 +472,36 @@ export function createStopOutput(server) {
 // Commands
 // ---------------------------------------------------------------------------
 
+/**
+ * The body `open` POSTs to `/api/agent/sessions`.
+ *
+ * `url` is the **GitHub PR page** — it is what the toolbar's "Open on GitHub" renders — never the
+ * local canvas URL, which the CLI prints separately and opens in the browser. The two were once one
+ * variable named `url`, and a session whose `pr.url` was the canvas made "Open on GitHub" open the
+ * canvas again instead of the PR.
+ *
+ * @param {object} input
+ * @param {import("./pr-ref.js").PrRef} input.ref
+ * @param {string} input.key
+ * @param {string} input.accessId
+ * @param {string} input.headSha
+ * @param {string} input.localRepo
+ * @returns {{ ref: import("./pr-ref.js").PrRef, key: string, accessId: string, url: string,
+ *   displayRef: string, headSha: string, localRepo: string, reopen: boolean }}
+ */
+export function sessionUpsertPayload({ ref, key, accessId, headSha, localRepo }) {
+  return {
+    ref,
+    key,
+    accessId,
+    url: prWebUrl(ref),
+    displayRef: displayRef(ref),
+    headSha,
+    localRepo,
+    reopen: true,
+  };
+}
+
 /** @param {string[]} args */
 async function openCommand(args) {
   const resolution = await resolvePrRef({
@@ -523,18 +553,14 @@ async function openCommand(args) {
     })),
   ]);
   const accessId = newAccessId();
-  const url = `${base}/review/${accessId}`;
+  // The canvas URL the user opens and the agent prints. Distinct from the PR's own GitHub URL on
+  // purpose: `sessionUpsertPayload` sends the latter, because that is what "Open on GitHub" renders.
+  const canvasUrl = `${base}/review/${accessId}`;
 
-  await postJson(`${base}/api/agent/sessions`, {
-    ref,
-    key,
-    accessId,
-    url,
-    displayRef: displayRef(ref),
-    headSha: snapshot.headSha,
-    localRepo: process.cwd(),
-    reopen: true,
-  });
+  await postJson(
+    `${base}/api/agent/sessions`,
+    sessionUpsertPayload({ ref, key, accessId, headSha: snapshot.headSha, localRepo: process.cwd() }),
+  );
   // Written after the session exists so the page can never render against a missing snapshot.
   await store.saveSnapshot(key, snapshot);
   await store.saveThreads(key, threads);
@@ -542,13 +568,13 @@ async function openCommand(args) {
   if (!hasFlag(args, "--no-open") && !process.env.PR_REVIEW_CANVAS_NO_OPEN) {
     try {
       const { default: open } = await import("open");
-      await open(url);
+      await open(canvasUrl);
     } catch {
       // A headless environment is fine; the URL is in the output either way.
     }
   }
 
-  return createOpenOutput({ ...resolution, key, url, snapshot, threads, session: await store.load(key) });
+  return createOpenOutput({ ...resolution, key, url: canvasUrl, snapshot, threads, session: await store.load(key) });
 }
 
 /** @param {string[]} args */
