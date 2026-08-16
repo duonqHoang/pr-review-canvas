@@ -5,10 +5,19 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      version:
-        description: New stable version, without the v prefix
+      release_type:
+        description: Semantic version component to increment
         required: true
-        type: string
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,7 +28,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.event.release.tag_name }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
 
     steps:
       - name: Check out the release
@@ -42,33 +51,27 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
         run: |
           if [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
             echo "Releases must be dispatched from the default branch: $DEFAULT_BRANCH" >&2
             exit 1
           fi
-          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Stable versions must use the X.Y.Z format." >&2
-            exit 1
-          fi
+          npm version "$RELEASE_TYPE" --no-git-tag-version
+          release_version=$(node -p 'require("./package.json").version')
+          echo "RELEASE_TAG=v$release_version" >> "$GITHUB_ENV"
           package_name=$(node -p 'require("./package.json").name')
           set +e
-          npm_view_output=$(npm view "$package_name@$RELEASE_VERSION" version 2>&1)
+          npm_view_output=$(npm view "$package_name@$release_version" version 2>&1)
           npm_view_status=$?
           set -e
           if [[ $npm_view_status -eq 0 ]]; then
-            echo "$package_name@$RELEASE_VERSION is already published to npm." >&2
+            echo "$package_name@$release_version is already published to npm." >&2
             exit 1
           fi
           if [[ "$npm_view_output" != *"E404"* ]]; then
             echo "$npm_view_output" >&2
             exit $npm_view_status
-          fi
-          current_version=$(node -p 'require("./package.json").version')
-          node -e 'const current = process.argv[1].split(".").map(Number); const next = process.argv[2].split(".").map(Number); const order = next.findIndex((part, index) => part !== current[index]); if (order >= 0 && next[order] < current[order]) { throw new Error(`${process.argv[2]} must not be older than ${process.argv[1]}`); }' "$current_version" "$RELEASE_VERSION"
-          if [[ "$current_version" != "$RELEASE_VERSION" ]]; then
-            npm version "$RELEASE_VERSION" --no-git-tag-version
           fi
 
       - name: Install dependencies
