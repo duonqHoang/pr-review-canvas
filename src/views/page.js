@@ -149,7 +149,10 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
 
 <header class="prc-header" data-prc-chrome>
   ${workspace ? `<a class="prc-workspace-back" href="${escapeHtml(workspace.url)}">&larr; ${escapeHtml(workspace.name)}</a>` : ""}
-  <h1 class="prc-pr-title">${escapeHtml(pr.title)} <span class="prc-pr-num">#${pr.number}</span></h1>
+  <div class="prc-pr-identity">
+    <span class="prc-pr-context">${escapeHtml(session.pr.owner)}/${escapeHtml(session.pr.repo)} <strong>#${pr.number}</strong></span>
+    <h1 class="prc-pr-title">${escapeHtml(pr.title)}</h1>
+  </div>
   <span class="prc-state">${escapeHtml(pr.state)}</span>
   <span class="prc-refs"><code>${escapeHtml(pr.baseRefName)}</code> &larr; <code>${escapeHtml(pr.headRefName)}</code></span>
   <span class="prc-spacer"></span>
@@ -159,32 +162,59 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
 </header>
 
 <div class="prc-toolbar" data-prc-chrome>
-  <button class="prc-btn prc-btn-quiet" id="prcToggleTree" type="button" aria-expanded="true"
-    aria-controls="prcTree" title="Show or hide the file tree (t)">&#9776; Files</button>
-  <span class="prc-counts">${snapshot.counts.files} files changed &middot;
-    <ins>+${snapshot.counts.additions}</ins> <del>&minus;${snapshot.counts.deletions}</del></span>
-  <span class="prc-spacer"></span>
-  <div class="prc-segmented" role="group" aria-label="Diff layout">
-    <button class="prc-seg" type="button" data-act="layout" data-layout="unified"
-      aria-pressed="${layout === "unified"}">Unified</button>
-    <button class="prc-seg" type="button" data-act="layout" data-layout="split"
-      aria-pressed="${layout === "split"}">Split</button>
+  <div class="prc-toolbar-context">
+    <button class="prc-btn prc-btn-quiet" id="prcToggleTree" type="button" aria-expanded="true"
+      aria-controls="prcTree" title="Show or hide the file tree (t)"><svg class="prc-icon" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg> Files</button>
+    <span class="prc-counts">${snapshot.counts.files} files changed &middot;
+      <ins>+${snapshot.counts.additions}</ins> <del>&minus;${snapshot.counts.deletions}</del></span>
   </div>
+  <span class="prc-spacer"></span>
+  <div class="prc-toolbar-controls">
+    <div class="prc-segmented" role="group" aria-label="Diff layout">
+      <button class="prc-seg" type="button" data-act="layout" data-layout="unified"
+        aria-pressed="${layout === "unified"}">Unified</button>
+      <button class="prc-seg" type="button" data-act="layout" data-layout="split"
+        aria-pressed="${layout === "split"}">Split</button>
+    </div>
   <!-- Rendered with the saved choice already applied, and with a word rather than only an icon: the
        three states are system / light / dark, and a lone sun cannot say which of the three is on. -->
   <button class="prc-btn prc-btn-quiet prc-theme" id="prcTheme" type="button"
     data-theme-choice="${escapeHtml(theme)}" title="Theme: ${escapeHtml(theme)} — click to change"
     aria-label="Theme: ${escapeHtml(theme)}"><span class="prc-theme-label">${escapeHtml(themeLabel)}</span></button>
-  <button class="prc-btn prc-btn-quiet" id="prcShortcuts" type="button" title="Keyboard shortcuts (?)">?</button>
-  <a class="prc-link" href="${escapeHtml(session.pr.url)}" target="_blank" rel="noreferrer noopener">Open on GitHub</a>
+  <button class="prc-btn prc-btn-quiet prc-toolbar-secondary" id="prcShortcuts" type="button"
+    title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg class="prc-icon" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 1 1 3.7 2c-1 .6-1.5 1.1-1.5 2M12 17h.01"/></svg></button>
+    <a class="prc-btn prc-btn-quiet prc-toolbar-link" href="${escapeHtml(session.pr.url)}" target="_blank"
+      rel="noreferrer noopener">GitHub <svg class="prc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5M19 5l-9 9"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
+    <details class="prc-toolbar-more">
+      <summary class="prc-btn prc-btn-quiet" aria-label="More review actions" title="More review actions">
+        <svg class="prc-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+      </summary>
+      <div class="prc-toolbar-menu">
+        <button type="button" id="prcShortcutsMobile">Keyboard shortcuts</button>
+        <a href="${escapeHtml(session.pr.url)}" target="_blank" rel="noreferrer noopener">Open on GitHub</a>
+      </div>
+    </details>
   <!-- Last, on the right: the panel it opens is the right-hand column, so the control sits on the side
        the thing appears. -->
-  <button class="prc-btn prc-btn-quiet" id="prcToggleChat" type="button" aria-expanded="false"
-    aria-controls="prcChat" title="Show or hide the chat with your agent (g)">&#128172; Chat</button>
+    <button class="prc-btn prc-chat-toggle" id="prcToggleChat" type="button" aria-expanded="false"
+      aria-controls="prcChat" title="Show or hide the chat with your agent (g)">
+      <svg class="prc-chat-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+      </svg>
+      <span>Chat</span>
+    </button>
+  </div>
 </div>
 
 <div class="prc-banner" id="prcPresenceBanner" hidden>
-  No agent is listening. Run <code>pr-review-canvas poll ${escapeHtml(session.pr.ref)}</code> in your agent session.
+  <span><strong>Agent disconnected.</strong> Start the listener to ask questions and submit this review.</span>
+  <code id="prcPollCommand">pr-review-canvas poll ${escapeHtml(session.pr.ref)}</code>
+  <button class="prc-btn prc-btn-quiet prc-banner-copy" id="prcCopyPollCommand" type="button">Copy command</button>
 </div>
 <!-- Stays on screen for the rest of the page's life: an ended session accepts nothing, and a message
      that says so has to outlast the click that caused it. Rendered here rather than built in the
@@ -247,7 +277,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
 
 <footer class="prc-reviewbar" data-prc-chrome>
   <span id="prcReviewBarSummary">No drafted comments</span>
-  <button class="prc-btn prc-btn-primary" id="prcOpenSubmit" type="button">Review changes</button>
+  <button class="prc-btn prc-btn-primary" id="prcOpenSubmit" type="button">Finish review</button>
   <!-- Far right, and pushed there by a margin rather than by moving anything else: the last thing in
        the footer is the last thing you do. Ending the session tells the agent to stop waiting, which is
        a different act from closing the tab — so it is quiet, kept clear of Submit, and confirmed. -->

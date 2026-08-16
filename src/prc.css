@@ -43,6 +43,10 @@
   --prc-lh-code: 20px;
 
   --prc-radius: 6px;
+  --prc-radius-lg: 10px;
+  --prc-shadow-sm: 0 1px 2px rgb(31 35 40 / 8%), 0 4px 12px rgb(31 35 40 / 5%);
+  --prc-shadow-md: 0 8px 24px rgb(31 35 40 / 14%);
+  --prc-motion-fast: 120ms ease;
   --prc-space-1: 4px;
   --prc-space-2: 8px;
   --prc-space-3: 12px;
@@ -135,6 +139,11 @@
   box-sizing: border-box;
 }
 
+:where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--prc-cursor);
+  outline-offset: 2px;
+}
+
 /* The browser's own rule for `[hidden]` is `display: none`, which any class that sets `display` beats
    on specificity — so a panel the client hides by setting `.hidden = true` stays on screen. That is
    what left an empty "0 drafts" heading above the file tree. Stated once, with the weight to win,
@@ -196,6 +205,7 @@ body.prc {
   top: 0;
   z-index: 10;
   min-height: var(--prc-header-h);
+  box-shadow: 0 1px 0 rgb(31 35 40 / 4%);
 }
 
 .prc-workspace-back {
@@ -218,6 +228,91 @@ body.prc {
   position: sticky;
   top: var(--prc-toolbar-top);
   z-index: 9;
+}
+
+.prc-toolbar-context,
+.prc-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+}
+
+.prc-toolbar-controls {
+  flex: none;
+}
+
+.prc-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  vertical-align: -3px;
+}
+
+.prc-pr-identity {
+  display: grid;
+  min-width: 0;
+}
+
+.prc-pr-context {
+  display: none;
+  color: var(--prc-fg-muted);
+  font: 11px/1.25 var(--prc-mono);
+}
+
+.prc-pr-context strong {
+  color: var(--prc-fg);
+}
+
+.prc-toolbar-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.prc-toolbar-more {
+  display: none;
+  position: relative;
+}
+
+.prc-toolbar-more > summary {
+  list-style: none;
+}
+
+.prc-toolbar-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.prc-toolbar-menu {
+  position: absolute;
+  top: calc(100% + var(--prc-space-1));
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 180px;
+  padding: var(--prc-space-1);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  background: var(--prc-bg-elevated);
+  box-shadow: var(--prc-shadow-md);
+}
+
+.prc-toolbar-menu button,
+.prc-toolbar-menu a {
+  min-height: 40px;
+  padding: var(--prc-space-2);
+  border: 0;
+  border-radius: var(--prc-radius);
+  background: none;
+  color: var(--prc-fg);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.prc-toolbar-menu button:hover,
+.prc-toolbar-menu a:hover {
+  background: var(--prc-bg-inset);
 }
 
 .prc-pr-title {
@@ -297,13 +392,40 @@ body.prc {
   .prc-file-fold {
     transition: none;
   }
+  .prc-btn,
+  .prc-workspace-card {
+    transition: none;
+  }
+  .prc-workspace-card:hover,
+  .prc-btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .prc-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-3);
   padding: var(--prc-space-2) var(--prc-space-4);
   background: var(--prc-bg-inset);
   border-bottom: 1px solid var(--prc-border);
   font-size: var(--prc-text-sm);
+}
+
+.prc-banner[hidden] {
+  display: none;
+}
+
+.prc-banner code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prc-banner-copy {
+  flex: none;
+  margin-left: auto;
 }
 .prc-banner-attention {
   border-left: 3px solid var(--prc-accent);
@@ -915,6 +1037,7 @@ body.prc {
      Where `clip` is unsupported the declaration is dropped, which loses the rounded corners and keeps
      the correct behaviour — the right way round. */
   overflow: clip;
+  box-shadow: var(--prc-shadow-sm);
 }
 
 .prc-file-header {
@@ -928,6 +1051,7 @@ body.prc {
   position: sticky;
   top: var(--prc-chrome-h);
   z-index: 5;
+  min-width: 0;
 }
 
 .prc-file-path {
@@ -938,6 +1062,10 @@ body.prc {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .prc-file-path:hover {
   background: var(--prc-border-muted);
@@ -1014,6 +1142,10 @@ body.prc {
   cursor: pointer;
   padding: 0;
 }
+
+.prc-file-fold .prc-icon {
+  transition: transform var(--prc-motion-fast);
+}
 .prc-file-fold:hover {
   background: var(--prc-bg);
   color: var(--prc-fg);
@@ -1023,6 +1155,10 @@ body.prc {
   outline-offset: -2px;
 }
 .prc-file-fold[aria-expanded="false"] {
+  transform: none;
+}
+
+.prc-file-fold[aria-expanded="false"] .prc-icon {
   transform: rotate(-90deg);
 }
 
@@ -1307,7 +1443,7 @@ body.prc-dragging {
   position: absolute;
   left: 2px;
   top: 1px;
-  width: 18px;
+  width: 20px;
   height: 18px;
   padding: 0;
   line-height: 16px;
@@ -1317,7 +1453,9 @@ body.prc-dragging {
   color: var(--prc-accent-fg);
   cursor: pointer;
   opacity: 0;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
 }
 .prc-line:hover .prc-plus,
 .prc-plus:focus-visible {
@@ -1736,9 +1874,19 @@ body.prc-dragging {
   background: var(--prc-bg-inset);
   color: var(--prc-fg);
   cursor: pointer;
+  min-height: 30px;
+  transition:
+    background-color var(--prc-motion-fast),
+    border-color var(--prc-motion-fast),
+    color var(--prc-motion-fast),
+    transform var(--prc-motion-fast);
+  touch-action: manipulation;
 }
 .prc-btn:hover:not(:disabled) {
   background: var(--prc-border-muted);
+}
+.prc-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .prc-btn:disabled {
   opacity: 0.5;
@@ -1748,11 +1896,39 @@ body.prc-dragging {
   background: var(--prc-accent);
   border-color: var(--prc-accent);
   color: var(--prc-accent-fg);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(31 35 40 / 12%);
 }
 .prc-btn-quiet {
   background: none;
   border-color: transparent;
   color: var(--prc-fg-muted);
+}
+
+.prc-chat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding-inline: var(--prc-space-3);
+  border-color: color-mix(in srgb, var(--prc-accent) 38%, var(--prc-border));
+  background: color-mix(in srgb, var(--prc-accent) 9%, var(--prc-bg));
+  color: var(--prc-accent);
+  font-weight: 600;
+}
+.prc-chat-toggle:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--prc-accent) 62%, var(--prc-border));
+  background: color-mix(in srgb, var(--prc-accent) 15%, var(--prc-bg));
+}
+.prc-chat-toggle[aria-expanded="true"] {
+  border-color: var(--prc-accent);
+  background: var(--prc-accent);
+  color: var(--prc-accent-fg);
+}
+.prc-chat-toggle-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 
 .prc-theme {
@@ -1786,12 +1962,17 @@ body.prc-dragging {
   border-top: 1px solid var(--prc-border);
   font-size: var(--prc-text-sm);
   z-index: 15;
+  box-shadow: 0 -4px 16px rgb(31 35 40 / 7%);
 }
 
 /* `margin-left: auto` rather than a spacer element, so the summary and Submit keep the positions
    reviewers already know and only this control moves to the corner. */
 .prc-reviewbar-end {
   margin-left: auto;
+}
+
+.prc-reviewbar #prcOpenSubmit:disabled {
+  box-shadow: none;
 }
 
 .prc-dialog {
@@ -2030,60 +2211,268 @@ kbd {
 
 /* ---- multi-PR workspace ---- */
 
+.prc-workspace {
+  min-height: 100vh;
+  padding-bottom: 0;
+  background: var(--prc-bg-inset);
+}
+.prc-workspace-header {
+  padding-inline: clamp(var(--prc-space-4), 4vw, 48px);
+  background: color-mix(in srgb, var(--prc-bg-elevated) 94%, transparent);
+}
+.prc-workspace-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--prc-fg);
+  color: var(--prc-bg);
+  font: 700 11px/1 var(--prc-mono);
+  letter-spacing: 0.08em;
+}
+.prc-workspace-identity {
+  display: grid;
+  min-width: 0;
+}
+.prc-workspace-eyebrow,
+.prc-workspace-kicker {
+  margin: 0;
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+.prc-workspace-header .prc-pr-title {
+  font-size: var(--prc-text);
+}
 .prc-workspace-main {
-  width: min(1200px, calc(100% - 32px));
+  width: min(1240px, calc(100% - 48px));
   margin: 0 auto;
-  padding: var(--prc-space-4) 0 64px;
+  padding: 40px 0 72px;
+}
+.prc-workspace-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 28px;
+}
+.prc-workspace-hero h2 {
+  margin: 4px 0 6px;
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+.prc-workspace-lede {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text);
+}
+.prc-workspace-actions {
+  display: flex;
+  flex: none;
+  gap: var(--prc-space-2);
 }
 .prc-workspace-summary {
-  background: var(--prc-bg-inset);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  background: var(--prc-bg-elevated);
   border: 1px solid var(--prc-border);
-  border-radius: var(--prc-radius);
-  padding: var(--prc-space-3);
-  margin-bottom: var(--prc-space-4);
+  border-radius: var(--prc-radius-lg);
+  box-shadow: var(--prc-shadow-sm);
+  margin-bottom: 36px;
+}
+.prc-workspace-stat {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 18px 20px;
+}
+.prc-workspace-stat + .prc-workspace-stat {
+  border-left: 1px solid var(--prc-border-muted);
+}
+.prc-workspace-stat strong {
+  font: 600 24px/1.2 var(--prc-mono);
+  letter-spacing: -0.04em;
+}
+.prc-workspace-stat span {
+  font-weight: 600;
+}
+.prc-workspace-stat small {
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+}
+.prc-workspace-stat[data-tone="quiet"] strong,
+.prc-workspace-stat[data-tone="quiet"] span {
+  color: var(--prc-fg-muted);
+}
+.prc-workspace-stat[data-tone="attention"] {
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--prc-attention) 75%, transparent);
+}
+.prc-workspace-loading,
+.prc-workspace-summary-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 20px;
+  color: var(--prc-fg-muted);
+}
+.prc-workspace-summary-error {
+  border-left: 3px solid var(--prc-danger);
+  color: var(--prc-danger);
 }
 .prc-workspace-section-head,
 .prc-workspace-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--prc-space-2);
 }
 .prc-workspace-section-head h2 {
-  margin-right: auto;
+  margin: 3px 0 14px;
+  font-size: 18px;
 }
 .prc-workspace-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--prc-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--prc-space-4);
 }
 .prc-workspace-card {
   border: 1px solid var(--prc-border);
-  border-radius: var(--prc-radius);
-  padding: var(--prc-space-3);
-  background: var(--prc-bg);
+  border-radius: var(--prc-radius-lg);
+  padding: var(--prc-space-4);
+  background: var(--prc-bg-elevated);
+  box-shadow: var(--prc-shadow-sm);
+  transition:
+    border-color var(--prc-motion-fast),
+    transform var(--prc-motion-fast),
+    box-shadow var(--prc-motion-fast);
+}
+.prc-workspace-card:hover {
+  border-color: color-mix(in srgb, var(--prc-accent) 45%, var(--prc-border));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgb(31 35 40 / 10%);
 }
 .prc-workspace-card[data-status="ended"] {
   opacity: 0.7;
 }
 .prc-workspace-card-title {
+  display: grid;
+  gap: var(--prc-space-1);
+  min-width: 0;
   color: var(--prc-accent);
   font-weight: 600;
   margin-right: auto;
+  text-decoration: none;
+}
+.prc-workspace-card-title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prc-workspace-card-ref {
+  color: var(--prc-fg-muted);
+  font: 11px/1.2 var(--prc-mono);
+  font-weight: 400;
+}
+.prc-workspace-priority-controls {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--prc-space-1);
+}
+.prc-workspace-priority {
+  width: 30px;
+  padding-inline: 0;
+  font-size: 14px;
 }
 .prc-workspace-card-meta,
 .prc-workspace-next {
   color: var(--prc-fg-muted);
   font-size: var(--prc-text-sm);
 }
+.prc-workspace-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--prc-space-1);
+  margin-top: var(--prc-space-3);
+}
+.prc-workspace-badge {
+  padding: 2px 7px;
+  border: 1px solid var(--prc-border-muted);
+  border-radius: 999px;
+  background: var(--prc-bg-inset);
+  font-size: 11px;
+}
+.prc-workspace-badge[data-tone="attention"] {
+  border-color: color-mix(in srgb, var(--prc-attention) 40%, var(--prc-border));
+  color: var(--prc-attention);
+}
+.prc-workspace-badge[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--prc-danger) 35%, var(--prc-border));
+  color: var(--prc-danger);
+}
 .prc-workspace-card progress {
+  display: block;
   width: 100%;
-  margin: var(--prc-space-3) 0;
+  height: 6px;
+  margin: var(--prc-space-4) 0;
+  accent-color: var(--prc-accent);
 }
 .prc-workspace-card-counts {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--prc-space-2);
   font-size: var(--prc-text-sm);
+}
+.prc-workspace-card-counts span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  color: var(--prc-fg-muted);
+  font-size: 11px;
+}
+.prc-workspace-card-counts strong {
+  color: var(--prc-fg);
+  font: 600 var(--prc-text)/1.2 var(--prc-mono);
+}
+.prc-workspace-next {
+  margin: var(--prc-space-3) 0 0;
+  padding: var(--prc-space-2) var(--prc-space-3);
+  border-left: 3px solid var(--prc-accent);
+  border-radius: 0 var(--prc-radius) var(--prc-radius) 0;
+  background: color-mix(in srgb, var(--prc-accent) 7%, transparent);
+}
+.prc-workspace-next strong {
+  color: var(--prc-fg);
+}
+.prc-workspace-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 36px;
+  margin-top: var(--prc-space-4);
+  text-decoration: none;
+}
+.prc-workspace-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--prc-space-4);
+  margin-top: 36px;
+}
+.prc-workspace-context {
+  padding: var(--prc-space-4);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius-lg);
+  background: var(--prc-bg-elevated);
+}
+.prc-workspace-context h2 {
+  margin: 3px 0 var(--prc-space-3);
+  font-size: 16px;
 }
 .prc-workspace-relations,
 .prc-workspace-overlaps {
@@ -2096,6 +2485,7 @@ kbd {
   padding: var(--prc-space-2) 0;
   font-family: var(--prc-mono);
   font-size: var(--prc-text-sm);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1000px) {
@@ -2120,8 +2510,198 @@ kbd {
   .prc-toolbar {
     flex-wrap: wrap;
   }
+  .prc-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--prc-space-1);
+    padding: var(--prc-space-1) var(--prc-space-2);
+  }
+  .prc-toolbar > .prc-spacer {
+    display: none;
+  }
+  .prc-toolbar-context,
+  .prc-toolbar-controls {
+    justify-content: space-between;
+    min-width: 0;
+  }
+  .prc-toolbar-controls {
+    gap: 2px;
+  }
+  .prc-header {
+    align-items: flex-start;
+    gap: var(--prc-space-2);
+    padding: var(--prc-space-2) var(--prc-space-4);
+  }
+  .prc-pr-identity {
+    flex: 1 1 calc(100% - 100px);
+    order: 2;
+  }
+  .prc-pr-context {
+    display: block;
+    margin-bottom: 3px;
+  }
+  .prc-workspace-back {
+    order: 1;
+  }
+  .prc-header > .prc-state,
+  .prc-header > .prc-refs {
+    order: 3;
+  }
+  .prc-header > .prc-spacer {
+    display: none;
+  }
+  .prc-header > .prc-presence {
+    order: 4;
+    margin-left: auto;
+  }
+  .prc-pr-title {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .prc-toolbar .prc-btn,
+  .prc-toolbar .prc-seg {
+    min-height: 40px;
+    padding-inline: var(--prc-space-2);
+  }
+  .prc-toolbar-secondary,
+  .prc-toolbar-link {
+    display: none;
+  }
+  .prc-toolbar-more {
+    display: block;
+  }
+  .prc-toolbar-more > summary.prc-btn {
+    display: inline-flex;
+    min-width: 40px;
+    padding-inline: var(--prc-space-2);
+  }
+  .prc-banner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding-inline: var(--prc-space-3);
+  }
+  .prc-banner > span {
+    flex: 1 1 100%;
+  }
+  .prc-banner code {
+    flex: 1 1 180px;
+  }
+  .prc-banner-copy {
+    min-height: 40px;
+  }
   .prc-layout {
     padding: var(--prc-space-2);
+  }
+  .prc-file-header {
+    gap: var(--prc-space-1);
+    padding-inline: var(--prc-space-1);
+  }
+  .prc-file-fold {
+    width: 40px;
+    height: 40px;
+  }
+  .prc-file-header > .prc-btn {
+    min-height: 40px;
+  }
+  .prc-viewed {
+    min-height: 40px;
+    padding-inline: var(--prc-space-1);
+  }
+  .prc-file-body {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+  .prc-diff {
+    width: max(100%, calc(88ch + 76px));
+    min-width: 100%;
+    table-layout: fixed;
+  }
+  .prc-code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .prc-plus {
+    left: 2px;
+    top: 1px;
+    width: 28px;
+    height: 18px;
+    line-height: 16px;
+    border: 0;
+    border-radius: 4px;
+    opacity: 1;
+  }
+  .prc-hunk-band td {
+    height: 36px;
+  }
+  .prc-expand-btn {
+    min-height: 36px;
+  }
+  .prc-file-diffstat,
+  .prc-file-status {
+    display: none;
+  }
+  .prc-file-path {
+    text-align: left;
+  }
+  .prc-workspace-header {
+    flex-wrap: nowrap;
+  }
+  .prc-workspace-main {
+    width: min(100% - 24px, 1240px);
+    padding: 28px 0 48px;
+  }
+  .prc-workspace-hero {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--prc-space-4);
+    margin-bottom: 20px;
+  }
+  .prc-workspace-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .prc-workspace-actions .prc-btn {
+    min-height: 44px;
+  }
+  .prc-workspace-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 28px;
+  }
+  .prc-workspace-stat {
+    padding: var(--prc-space-3);
+  }
+  .prc-workspace-stat:nth-child(3) {
+    border-left: 0;
+  }
+  .prc-workspace-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--prc-border-muted);
+  }
+  .prc-workspace-card-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .prc-workspace-priority {
+    width: 44px;
+    min-height: 44px;
+  }
+  .prc-workspace-continue {
+    width: 100%;
+    min-height: 44px;
+  }
+  .prc-reviewbar {
+    gap: var(--prc-space-2);
+    padding: var(--prc-space-2);
+  }
+  .prc-reviewbar .prc-btn {
+    min-height: 44px;
+  }
+  .prc-reviewbar #prcReviewBarSummary {
+    max-width: 92px;
+  }
+  .prc-workspace-context-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
   /* Side by side does not fit; the unified table still does. */
   .prc-diff-split .prc-col-num {

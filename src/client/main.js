@@ -311,9 +311,10 @@ function anchorFromCell(cell) {
 /**
  * A drag in progress over the gutter.
  *
- * @type {{ fileIndex: number, side: string, anchorLine: number, moved: boolean } | null}
+ * @type {{ fileIndex: number, side: string, anchorLine: number, originLine: number, moved: boolean, fromPlus: boolean } | null}
  */
 let dragging = null;
+let suppressPlusClick = false;
 
 /**
  * Start a gutter drag.
@@ -327,8 +328,7 @@ let dragging = null;
 function onGutterMouseDown(event) {
   if (event.button !== 0) return;
   const target = /** @type {Element} */ (event.target);
-  // The `+` button keeps its own click behaviour, including shift to extend.
-  if (target.closest(".prc-plus")) return;
+  const fromPlus = Boolean(target.closest(".prc-plus"));
   const start = gutterTarget(target.closest("td.prc-num"));
   if (!start) return;
 
@@ -338,7 +338,14 @@ function onGutterMouseDown(event) {
     event.shiftKey && state.anchor && state.anchor.fileIndex === start.fileIndex && state.anchor.side === start.side
       ? (state.anchor.startLine ?? state.anchor.line)
       : start.line;
-  dragging = { fileIndex: start.fileIndex, side: start.side, anchorLine: existing, moved: false };
+  dragging = {
+    fileIndex: start.fileIndex,
+    side: start.side,
+    anchorLine: existing,
+    originLine: start.line,
+    moved: false,
+    fromPlus,
+  };
   document.body.classList.add("prc-dragging");
   const built = rangeAnchor(start.fileIndex, start.side, existing, start.line);
   if (built) paintSelection(built.anchor);
@@ -351,7 +358,7 @@ function onGutterMouseMove(event) {
   // Leaving the file or crossing to the other side clamps rather than following the pointer: a range
   // must be one file and one side, and `start_side` must equal `side` at the API.
   if (!over || over.fileIndex !== dragging.fileIndex || over.side !== dragging.side) return;
-  dragging.moved = true;
+  dragging.moved = dragging.moved || over.line !== dragging.originLine;
   const built = rangeAnchor(dragging.fileIndex, dragging.side, dragging.anchorLine, over.line);
   if (built) paintSelection(built.anchor);
 }
@@ -362,6 +369,10 @@ function onGutterMouseUp(event) {
   dragging = null;
   document.body.classList.remove("prc-dragging");
   if (!active) return;
+  // A click on `+` still owns the no-movement path, including its Shift-click semantics. Once the
+  // pointer crosses into another row the gutter drag owns the gesture and suppresses the synthetic
+  // click browsers emit after mouseup, or that click would collapse the range back to one line.
+  if (active.fromPlus && !active.moved) return;
   const over = gutterTarget(/** @type {Element} */ (event.target).closest("td.prc-num"));
   const endLine =
     over && over.fileIndex === active.fileIndex && over.side === active.side ? over.line : active.anchorLine;
@@ -370,6 +381,8 @@ function onGutterMouseUp(event) {
   state.anchor = built.anchor;
   paintSelection(built.anchor);
   openComposer("comment", { note: describeRange(built.range, /** @type {any} */ (active.side)) });
+  suppressPlusClick = active.fromPlus;
+  if (suppressPlusClick) setTimeout(() => (suppressPlusClick = false), 0);
 }
 
 /** @param {MouseEvent} event */
@@ -439,6 +452,11 @@ function onDocumentClick(event) {
 
   const plus = target.closest(".prc-plus");
   if (plus) {
+    if (suppressPlusClick) {
+      suppressPlusClick = false;
+      event.preventDefault();
+      return;
+    }
     const cell = plus.closest("tr")?.querySelector(`td.prc-code[data-lk="${cssEscape(plus.getAttribute("data-lk"))}"]`);
     const anchor = anchorFromCell(cell ?? null);
     if (!anchor) return;
@@ -2860,6 +2878,7 @@ function renderReviewBar() {
     // Blocked while the agent is mid-work, mirroring lavish's presence gate: the agent is the one
     // that will perform the submit, so arming a second one would race it.
     button.disabled = state.submitting || state.presence === "working" || state.status === "ended";
+    button.textContent = count > 0 ? `Review ${count} comment${count === 1 ? "" : "s"}` : "Finish review";
   }
 }
 
@@ -3739,6 +3758,15 @@ el("prcChatText")?.addEventListener("keydown", (event) => {
 });
 el("prcShortcuts")?.addEventListener("click", () => {
   /** @type {HTMLDialogElement | null} */ (el("prcShortcutsDialog"))?.showModal();
+});
+el("prcShortcutsMobile")?.addEventListener("click", () => {
+  /** @type {HTMLDialogElement | null} */ (el("prcShortcutsDialog"))?.showModal();
+  /** @type {HTMLDetailsElement | null} */ (document.querySelector(".prc-toolbar-more"))?.removeAttribute("open");
+});
+el("prcCopyPollCommand")?.addEventListener("click", () => {
+  const command = el("prcPollCommand")?.textContent ?? "";
+  if (!command) return;
+  copyText(command, "Agent command copied");
 });
 // Cycles rather than opening a menu: three states, and the one the reader wants is at most two
 // clicks away with nothing to aim at.

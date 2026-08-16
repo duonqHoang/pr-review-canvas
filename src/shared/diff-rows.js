@@ -502,7 +502,9 @@ export function filePanelHtml(fileIndex, file, state) {
     // `▼`, not `▾`: the latter is Unicode's *small* triangle and stays small however large the button
     // is, which is why enlarging the button alone did not help. Same glyph as the expand bands, so the
     // two controls read as members of one family.
-    ` aria-expanded="${collapsed ? "false" : "true"}" aria-label="Collapse or expand this file">▼</button>` +
+    ` aria-expanded="${collapsed ? "false" : "true"}" aria-label="Collapse or expand this file"><svg class="prc-icon"` +
+    ` viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"` +
+    ` stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>` +
     `<span class="prc-file-diffstat" aria-label="${file.additions} additions, ${file.deletions} deletions">` +
     `<ins>+${file.additions}</ins> <del>&minus;${file.deletions}</del></span>` +
     `<button class="prc-file-path" type="button" data-act="copy-path" data-path="${escapeHtml(file.path)}"` +
@@ -510,7 +512,7 @@ export function filePanelHtml(fileIndex, file, state) {
     `<span class="prc-file-status">${escapeHtml(status)}</span>` +
     `<span class="prc-spacer"></span>` +
     `<button class="prc-btn prc-btn-quiet" type="button" data-act="copy-file-link" data-file-index="${fileIndex}"` +
-    ` title="Copy a link to this file in the review">Link</button>` +
+    ` title="Copy a permalink to this file">Copy link</button>` +
     `<label class="prc-viewed"><input type="checkbox" class="prc-viewed-box" data-path="${escapeHtml(file.path)}"` +
     `${state.viewed ? " checked" : ""}><span>Viewed</span></label>` +
     `</div>` +

@@ -6,6 +6,7 @@
 const bootstrap = JSON.parse(document.getElementById("prc-workspace-bootstrap")?.textContent ?? "{}");
 const accessId = String(bootstrap.accessId ?? "");
 const api = `/api/ui/w/${encodeURIComponent(accessId)}`;
+const themes = ["system", "light", "dark"];
 /** @type {any} */
 let latest = null;
 
@@ -17,6 +18,33 @@ function text(value) {
   return document.createTextNode(value);
 }
 
+/** @param {string} theme */
+function applyTheme(theme) {
+  const choice = themes.includes(theme) ? theme : "system";
+  if (choice === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", choice);
+  const button = el("prcWorkspaceTheme");
+  if (button) {
+    const label = { system: "Auto", light: "Light", dark: "Dark" }[choice] ?? "Auto";
+    button.dataset.themeChoice = choice;
+    button.setAttribute("title", `Theme: ${choice} — click to change`);
+    button.setAttribute("aria-label", `Theme: ${choice}`);
+    const face = button.querySelector(".prc-theme-label");
+    if (face) face.textContent = label;
+  }
+  return choice;
+}
+
+/** @param {string} theme */
+function saveTheme(theme) {
+  const choice = applyTheme(theme);
+  return fetch(`${api}/prefs`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ theme: choice }),
+  });
+}
+
 /** @param {any} data */
 function render(data) {
   latest = data;
@@ -24,7 +52,13 @@ function render(data) {
   const totals = data.totals ?? {};
   const summary = el("prcWorkspaceSummary");
   if (summary) {
-    summary.textContent = `${members.length} PR${members.length === 1 ? "" : "s"} · ${totals.openQuestions ?? 0} open questions · ${totals.openFindings ?? 0} open findings · ${totals.draftComments ?? 0} drafts`;
+    summary.classList.remove("prc-workspace-summary-error");
+    summary.replaceChildren(
+      summaryStat("Pull requests", members.length, "in this workspace", "neutral"),
+      summaryStat("Open questions", totals.openQuestions ?? 0, "waiting for the agent", "attention"),
+      summaryStat("Open findings", totals.openFindings ?? 0, "need a decision", "attention"),
+      summaryStat("Draft comments", totals.draftComments ?? 0, "saved, not submitted", "attention"),
+    );
   }
 
   const grid = el("prcWorkspaceGrid");
@@ -53,25 +87,32 @@ function memberCard(member) {
   const title = document.createElement("a");
   title.className = "prc-workspace-card-title";
   title.href = member.canvasUrl;
-  title.append(text(member.title ? `${member.title} · ${member.ref}` : member.ref));
+  const ref = document.createElement("span");
+  ref.className = "prc-workspace-card-ref";
+  ref.append(text(member.ref));
+  const titleText = document.createElement("span");
+  titleText.append(text(member.title || member.ref));
+  title.append(ref, titleText);
+  const priorityControls = document.createElement("div");
+  priorityControls.className = "prc-workspace-priority-controls";
+  priorityControls.setAttribute("aria-label", `Priority ${member.priority}`);
   const priority = document.createElement("span");
   priority.className = "prc-chip";
   priority.append(text(`P${member.priority}`));
-  const earlier = priorityButton("↑", member.key, Math.max(1, member.priority - 1), "Raise priority");
-  const later = priorityButton("↓", member.key, member.priority + 1, "Lower priority");
-  head.append(title, priority, earlier, later);
+  const earlier = priorityButton("↑", member.key, Math.max(1, member.priority - 1), "Move earlier");
+  const later = priorityButton("↓", member.key, member.priority + 1, "Move later");
+  priorityControls.append(priority, earlier, later);
+  head.append(title, priorityControls);
 
   const meta = document.createElement("div");
   meta.className = "prc-workspace-card-meta";
-  meta.append(
-    text(
-      `${member.status}${member.headMoved ? " · new head" : ""}${member.alerts ? ` · ${member.alerts} alerts` : ""}`,
-    ),
-  );
+  meta.append(metaBadge(member.status, "status"));
+  if (member.headMoved) meta.append(metaBadge("New head", "attention"));
+  if (member.alerts) meta.append(metaBadge(`${member.alerts} alerts`, "danger"));
   if (member.risk?.critical || member.risk?.high) {
-    meta.append(text(` · ${member.risk.critical ?? 0} critical / ${member.risk.high ?? 0} high risk`));
+    meta.append(metaBadge(`${member.risk.critical ?? 0} critical / ${member.risk.high ?? 0} high risk`, "danger"));
   }
-  if (member.staleFindings) meta.append(text(` · ${member.staleFindings} stale findings`));
+  if (member.staleFindings) meta.append(metaBadge(`${member.staleFindings} stale findings`, "attention"));
 
   const progress = document.createElement("progress");
   progress.max = Math.max(1, member.files ?? 0);
@@ -89,9 +130,41 @@ function memberCard(member) {
 
   const next = document.createElement("p");
   next.className = "prc-workspace-next";
-  next.append(text(member.nextAction));
-  card.append(head, meta, progress, counts, next);
+  const nextLabel = document.createElement("strong");
+  nextLabel.append(text("Next: "));
+  next.append(nextLabel, text(member.nextAction));
+  const continueLink = document.createElement("a");
+  continueLink.className = "prc-btn prc-btn-primary prc-workspace-continue";
+  continueLink.href = member.canvasUrl;
+  continueLink.append(
+    text(member.alerts || member.openQuestions || member.openFindings ? "Resolve next action" : "Continue review"),
+  );
+  card.append(head, next, meta, progress, counts, continueLink);
   return card;
+}
+
+/** @param {string} label @param {string | number} value @param {string} hint @param {string} tone */
+function summaryStat(label, value, hint, tone) {
+  const item = document.createElement("div");
+  item.className = "prc-workspace-stat";
+  item.dataset.tone = Number(value) > 0 ? tone : "quiet";
+  const number = document.createElement("strong");
+  number.append(text(String(value)));
+  const name = document.createElement("span");
+  name.append(text(label));
+  const detail = document.createElement("small");
+  detail.append(text(hint));
+  item.append(number, name, detail);
+  return item;
+}
+
+/** @param {string} label @param {string} tone */
+function metaBadge(label, tone) {
+  const badge = document.createElement("span");
+  badge.className = "prc-workspace-badge";
+  badge.dataset.tone = tone;
+  badge.append(text(label));
+  return badge;
 }
 
 /** @param {string} label @param {string} key @param {number} priority @param {string} title */
@@ -159,6 +232,11 @@ async function load() {
 }
 
 el("prcWorkspaceRefresh")?.addEventListener("click", () => load().catch(showError));
+el("prcWorkspaceTheme")?.addEventListener("click", () => {
+  const current = String(el("prcWorkspaceTheme")?.dataset.themeChoice ?? "system");
+  const next = themes[(themes.indexOf(current) + 1) % themes.length];
+  saveTheme(next).catch(() => {});
+});
 el("prcWorkspaceRefreshPrs")?.addEventListener("click", async () => {
   const button = /** @type {HTMLButtonElement | null} */ (el("prcWorkspaceRefreshPrs"));
   if (button) button.disabled = true;
@@ -205,19 +283,28 @@ el("prcWorkspaceGrid")?.addEventListener("click", async (event) => {
 /** @param {unknown} error */
 function showError(error) {
   const summary = el("prcWorkspaceSummary");
-  if (summary) summary.textContent = String(error instanceof Error ? error.message : error);
+  if (summary) {
+    summary.classList.add("prc-workspace-summary-error");
+    summary.textContent = `Could not update the workspace. ${String(error instanceof Error ? error.message : error)}`;
+  }
+}
+
+/** @param {string} state @param {string} label */
+function setPresence(state, label) {
+  const presence = el("prcWorkspacePresence");
+  if (!presence) return;
+  presence.dataset.state = state;
+  const dot = document.createElement("span");
+  dot.className = "prc-presence-dot";
+  dot.setAttribute("aria-hidden", "true");
+  presence.replaceChildren(dot, text(label));
 }
 
 const source = new EventSource(`/workspace-events/${encodeURIComponent(accessId)}`);
 source.addEventListener("workspace-changed", () => load().catch(showError));
 source.addEventListener("state-sync", (event) => render(JSON.parse(/** @type {MessageEvent} */ (event).data)));
-source.addEventListener("open", () => {
-  const presence = el("prcWorkspacePresence");
-  if (presence) presence.textContent = "Live";
-});
-source.addEventListener("error", () => {
-  const presence = el("prcWorkspacePresence");
-  if (presence) presence.textContent = "Reconnecting";
-});
+source.addEventListener("open", () => setPresence("listening", "Live updates"));
+source.addEventListener("error", () => setPresence("working", "Reconnecting"));
 
+if (bootstrap.syncTheme) saveTheme(String(bootstrap.theme ?? "system")).catch(() => {});
 load().catch(showError);

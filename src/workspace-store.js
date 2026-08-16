@@ -17,6 +17,7 @@ import { workspaceFile } from "./paths.js";
  * @property {string} name
  * @property {Array<{ sessionKey: string, priority: number, addedAt: string }>} members
  * @property {Array<{ from: string, to: string, kind: RelationKind }>} relations
+ * @property {{ theme: "system" | "light" | "dark" }} prefs
  * @property {string} createdAt
  * @property {string} updatedAt
  */
@@ -65,7 +66,10 @@ export class WorkspaceStore {
   async get(nameOrId) {
     const state = await this.read();
     const id = workspaceId(nameOrId);
-    return state.workspaces[id] ?? Object.values(state.workspaces).find((item) => item.accessId === nameOrId) ?? null;
+    const workspace =
+      state.workspaces[id] ?? Object.values(state.workspaces).find((item) => item.accessId === nameOrId) ?? null;
+    if (workspace && !workspace.prefs) workspace.prefs = { theme: "system" };
+    return workspace;
   }
 
   /** @param {string} name */
@@ -83,6 +87,7 @@ export class WorkspaceStore {
           name: name.trim(),
           members: [],
           relations: [],
+          prefs: { theme: /** @type {const} */ ("system") },
           createdAt: at,
           updatedAt: at,
         };
@@ -124,6 +129,13 @@ export class WorkspaceStore {
       const targetIndex = Math.min(workspace.members.length, Math.max(0, Math.trunc(priority) - 1));
       workspace.members.splice(targetIndex, 0, member);
       for (const [index, candidate] of workspace.members.entries()) candidate.priority = index + 1;
+    });
+  }
+
+  /** @param {string} nameOrId @param {unknown} theme */
+  async setTheme(nameOrId, theme) {
+    return this.update(nameOrId, (workspace) => {
+      workspace.prefs = { theme: theme === "light" || theme === "dark" ? theme : "system" };
     });
   }
 
