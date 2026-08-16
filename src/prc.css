@@ -2624,14 +2624,13 @@ kbd {
     overflow-wrap: anywhere;
   }
   .prc-plus {
-    left: -2px;
-    top: -6px;
-    width: 36px;
-    height: 36px;
-    line-height: 34px;
-    border: 6px solid transparent;
-    border-radius: 11px;
-    background-clip: padding-box;
+    left: 2px;
+    top: 0;
+    width: 28px;
+    height: 20px;
+    line-height: 18px;
+    border: 0;
+    border-radius: 4px;
     opacity: 1;
   }
   .prc-hunk-band td {
