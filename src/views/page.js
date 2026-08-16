@@ -28,6 +28,24 @@ export const PRERENDER_FILE_COUNT = 10;
 export const THEMES = ["system", "light", "dark"];
 
 /**
+ * A useful no-JavaScript date label. The client upgrades it to relative time, while `datetime`
+ * preserves the exact value for assistive technology and a hover title.
+ *
+ * @param {string} value
+ */
+function dateLabel(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.valueOf())) return "Unknown time";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+}
+
+/** @param {string} value @param {string} prefix */
+function timeHtml(value, prefix) {
+  if (!value) return "";
+  return `${escapeHtml(prefix)} <time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}" data-prc-relative>${escapeHtml(dateLabel(value))}</time>`;
+}
+
+/**
  * @param {object} input
  * @param {import("../session-store.js").Session} input.session
  * @param {import("../snapshot.js").Snapshot} input.snapshot
@@ -39,6 +57,9 @@ export const THEMES = ["system", "light", "dark"];
  */
 export function renderReviewPage({ session, snapshot, clientScript, version, threads, workspace = null }) {
   const pr = snapshot.pr;
+  const prCommits = Array.isArray(pr.commits) ? pr.commits : [];
+  const stateLabel = pr.isDraft ? "DRAFT" : String(pr.state || "UNKNOWN").toUpperCase();
+  const stateTone = ["OPEN", "MERGED", "CLOSED"].includes(stateLabel) ? stateLabel.toLowerCase() : "draft";
   const title = `${pr.title} · ${session.pr.ref}`;
   const existingThreads = threads?.threads ?? [];
   const resolvedStateKnown = threads?.graphqlAvailable !== false;
@@ -81,6 +102,12 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
       baseRefName: pr.baseRefName,
       headSha: snapshot.headSha,
       baseSha: snapshot.baseSha,
+      authorLogin: pr.authorLogin,
+      body: pr.body,
+      createdAt: pr.createdAt,
+      updatedAt: pr.updatedAt,
+      mergedAt: pr.mergedAt,
+      commits: prCommits,
     },
     counts: snapshot.counts,
     fileCountCapped: snapshot.fileCountCapped,
@@ -134,6 +161,17 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
       }),
     )
     .join("");
+  /** @param {import("../gh-fetch.js").PullRequestCommit} commit */
+  const commitHtml = (commit) => {
+    const author = commit.authorLogin || commit.authorName || "Unknown author";
+    return `<li class="prc-commit">
+        <code title="${escapeHtml(commit.oid)}">${escapeHtml(commit.oid.slice(0, 7))}</code>
+        <span class="prc-commit-title">${escapeHtml(commit.messageHeadline || "Untitled commit")}</span>
+        <span class="prc-commit-meta">${escapeHtml(author)}${commit.authoredDate ? ` &middot; ${timeHtml(commit.authoredDate, "")}` : ""}</span>
+      </li>`;
+  };
+  const visibleCommits = prCommits.slice(0, 10).map(commitHtml).join("");
+  const remainingCommits = prCommits.slice(10).map(commitHtml).join("");
 
   return `<!doctype html>
 <html lang="en"${theme === "system" ? "" : ` data-theme="${theme}"`}>
@@ -152,8 +190,9 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
   <div class="prc-pr-identity">
     <span class="prc-pr-context">${escapeHtml(session.pr.owner)}/${escapeHtml(session.pr.repo)} <strong>#${pr.number}</strong></span>
     <h1 class="prc-pr-title">${escapeHtml(pr.title)}</h1>
+    <span class="prc-pr-byline">by <strong>${escapeHtml(pr.authorLogin || "Unknown author")}</strong>${pr.createdAt ? ` &middot; ${timeHtml(pr.createdAt, "opened")}` : ""}${pr.mergedAt ? ` &middot; ${timeHtml(pr.mergedAt, "merged")}` : ""}</span>
   </div>
-  <span class="prc-state">${escapeHtml(pr.state)}</span>
+  <span class="prc-state" data-state="${stateTone}">${escapeHtml(stateLabel)}</span>
   <span class="prc-refs"><code>${escapeHtml(pr.baseRefName)}</code> &larr; <code>${escapeHtml(pr.headRefName)}</code></span>
   <span class="prc-spacer"></span>
   <div class="prc-presence" id="prcPresence" data-state="waiting" role="status" aria-live="polite">
@@ -161,7 +200,14 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
   </div>
 </header>
 
-<div class="prc-toolbar" data-prc-chrome>
+<nav class="prc-view-tabs" data-prc-chrome role="tablist" aria-label="Pull request view">
+  <button id="prcReviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="true" tabindex="0"
+    aria-controls="prcReviewView">Review <span>${snapshot.counts.files}</span></button>
+  <button id="prcOverviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="false" tabindex="-1"
+    aria-controls="prcOverview">Overview <span>${prCommits.length}</span></button>
+</nav>
+
+<div class="prc-toolbar" id="prcReviewToolbar" data-prc-chrome>
   <div class="prc-toolbar-context">
     <button class="prc-btn prc-btn-quiet" id="prcToggleTree" type="button" aria-expanded="true"
       aria-controls="prcTree" title="Show or hide the file tree (t)"><svg class="prc-icon" viewBox="0 0 24 24"
@@ -232,7 +278,32 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
      a message that disappears after six seconds is the wrong shape for that. -->
 <div class="prc-banner prc-banner-alert" id="prcAlerts" hidden role="alert"></div>
 
-<main class="prc-layout" data-tree="open" data-chat="closed">
+<section class="prc-overview" id="prcOverview" role="tabpanel" aria-labelledby="prcOverviewTab" hidden>
+  <div class="prc-overview-grid">
+    <article class="prc-overview-card">
+      <h2>Description</h2>
+      <div class="prc-overview-body" id="prcOverviewBody"></div>
+      <p class="prc-overview-empty" id="prcOverviewEmpty" hidden>No description provided.</p>
+    </article>
+    <aside class="prc-overview-card prc-overview-details" aria-label="Pull request details">
+      <h2>Details</h2>
+      <dl>
+        <div><dt>Author</dt><dd>${escapeHtml(pr.authorLogin || "Unknown author")}</dd></div>
+        <div><dt>Opened</dt><dd>${pr.createdAt ? timeHtml(pr.createdAt, "") : "Unknown"}</dd></div>
+        <div><dt>Updated</dt><dd>${pr.updatedAt ? timeHtml(pr.updatedAt, "") : "Unknown"}</dd></div>
+        ${pr.mergedAt ? `<div><dt>Merged</dt><dd>${timeHtml(pr.mergedAt, "")}</dd></div>` : ""}
+        <div><dt>Branches</dt><dd><code>${escapeHtml(pr.baseRefName)}</code> &larr; <code>${escapeHtml(pr.headRefName)}</code></dd></div>
+      </dl>
+    </aside>
+  </div>
+  <article class="prc-overview-card prc-commits-card">
+    <h2>Commits <span>${prCommits.length}</span></h2>
+    ${visibleCommits ? `<ol class="prc-commit-list">${visibleCommits}</ol>` : `<p class="prc-overview-empty">No commits returned by GitHub.</p>`}
+    ${remainingCommits ? `<details class="prc-commit-more"><summary>Show ${prCommits.length - 10} more commits</summary><ol class="prc-commit-list">${remainingCommits}</ol></details>` : ""}
+  </article>
+</section>
+
+<main class="prc-layout" id="prcReviewView" role="tabpanel" aria-labelledby="prcReviewTab" data-tree="open" data-chat="closed">
   <nav class="prc-tree" id="prcTree" data-prc-chrome aria-label="Changed files">
     <div class="prc-tree-head">
       <input type="search" id="prcTreeFilter" class="prc-tree-filter" placeholder="Filter files (t)"
@@ -275,7 +346,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
   </aside>
 </main>
 
-<footer class="prc-reviewbar" data-prc-chrome>
+<footer class="prc-reviewbar" id="prcReviewBar" data-prc-chrome>
   <span id="prcReviewBarSummary">No drafted comments</span>
   <button class="prc-btn prc-btn-primary" id="prcOpenSubmit" type="button">Finish review</button>
   <!-- Far right, and pushed there by a margin rather than by moving anything else: the last thing in

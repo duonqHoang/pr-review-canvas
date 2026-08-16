@@ -21,6 +21,12 @@
   --prc-accent-fg: #ffffff;
   --prc-danger: #cf222e;
   --prc-success: #1a7f37;
+  /* PR lifecycle badges use solid semantic fills. They stay dark enough for white text in both
+     themes; the brighter dark-mode success/danger tokens are intended as text, not backgrounds. */
+  --prc-state-open: #1a7f37;
+  --prc-state-merged: #6f42c1;
+  --prc-state-closed: #cf222e;
+  --prc-state-draft: #57606a;
   /* Warning, not error: a drifted anchor is something to decide about, not something that broke.
      Both values clear 4.5:1 on the elevated background they are used on — tokens.test.js pins it. */
   --prc-attention: #9a6700;
@@ -208,6 +214,162 @@ body.prc {
   box-shadow: 0 1px 0 rgb(31 35 40 / 4%);
 }
 
+.prc-pr-byline {
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prc-pr-byline strong {
+  color: var(--prc-fg);
+  font-weight: 600;
+}
+
+.prc-view-tabs {
+  display: flex;
+  gap: var(--prc-space-1);
+  padding: 0 var(--prc-space-4);
+  border-bottom: 1px solid var(--prc-border);
+  background: var(--prc-bg);
+}
+
+.prc-view-tab {
+  min-height: 44px;
+  padding: 0 var(--prc-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--prc-fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.prc-view-tab:hover {
+  color: var(--prc-fg);
+  background: var(--prc-bg-inset);
+}
+
+.prc-view-tab[aria-selected="true"] {
+  border-bottom-color: var(--prc-accent);
+  color: var(--prc-fg);
+}
+
+.prc-view-tab span,
+.prc-commits-card h2 span {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--prc-bg-inset);
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+  font-weight: 500;
+}
+
+.prc-overview {
+  width: min(calc(100% - 32px), 1120px);
+  margin: var(--prc-space-4) auto calc(var(--prc-footer-h) + 32px);
+}
+
+.prc-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: var(--prc-space-4);
+}
+
+.prc-overview-card {
+  min-width: 0;
+  margin-bottom: var(--prc-space-4);
+  padding: var(--prc-space-4);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius-lg);
+  background: var(--prc-bg-elevated);
+  box-shadow: var(--prc-shadow-sm);
+}
+
+.prc-overview-card h2 {
+  margin: 0 0 var(--prc-space-3);
+  font-size: 16px;
+}
+
+.prc-overview-body {
+  max-width: 75ch;
+  overflow-wrap: anywhere;
+}
+
+.prc-overview-body > :first-child {
+  margin-top: 0;
+}
+
+.prc-overview-body > :last-child {
+  margin-bottom: 0;
+}
+
+.prc-overview-empty {
+  color: var(--prc-fg-muted);
+}
+
+.prc-overview-details dl,
+.prc-overview-details dd {
+  margin: 0;
+}
+
+.prc-overview-details dl > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: var(--prc-space-2);
+  padding: var(--prc-space-2) 0;
+  border-top: 1px solid var(--prc-border-muted);
+}
+
+.prc-overview-details dt {
+  color: var(--prc-fg-muted);
+}
+
+.prc-overview-details dd {
+  overflow-wrap: anywhere;
+}
+
+.prc-commit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prc-commit {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: var(--prc-space-3);
+  align-items: baseline;
+  padding: var(--prc-space-3) 0;
+  border-top: 1px solid var(--prc-border-muted);
+}
+
+.prc-commit-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.prc-commit-meta {
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+  text-align: right;
+}
+
+.prc-commit-more {
+  margin-top: var(--prc-space-2);
+}
+
+.prc-commit-more > summary {
+  min-height: 44px;
+  padding: var(--prc-space-3) 0;
+  color: var(--prc-accent);
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .prc-workspace-back {
   color: var(--prc-accent);
   flex: 0 0 auto;
@@ -335,8 +497,20 @@ body.prc {
   font-size: var(--prc-text-sm);
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--prc-success);
+  background: var(--prc-state-draft);
   color: #fff;
+}
+
+.prc-state[data-state="open"] {
+  background: var(--prc-state-open);
+}
+
+.prc-state[data-state="merged"] {
+  background: var(--prc-state-merged);
+}
+
+.prc-state[data-state="closed"] {
+  background: var(--prc-state-closed);
 }
 
 .prc-refs code {
@@ -2560,6 +2734,33 @@ kbd {
     white-space: normal;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
+  }
+  .prc-pr-byline {
+    white-space: normal;
+  }
+  .prc-view-tabs {
+    padding-inline: var(--prc-space-2);
+  }
+  .prc-view-tab {
+    flex: 1;
+  }
+  .prc-overview {
+    width: calc(100% - 16px);
+    margin-top: var(--prc-space-2);
+  }
+  .prc-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .prc-overview-card {
+    padding: var(--prc-space-3);
+  }
+  .prc-commit {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  .prc-commit-meta {
+    grid-column: 2;
+    text-align: left;
   }
   .prc-toolbar .prc-btn,
   .prc-toolbar .prc-seg {

@@ -320,6 +320,16 @@ test("contrastRatio matches the WCAG reference pairs", () => {
   assert.equal(Number(contrastRatio("#1f2328", "#1f2328").toFixed(2)), 1);
 });
 
+test("every pull request state badge keeps white text readable", () => {
+  // Colour reinforces the visible state word rather than replacing it, but the badge still has to
+  // remain readable in either theme. These fills are deliberately shared across themes so a bright
+  // dark-mode text token cannot accidentally become a low-contrast badge background.
+  for (const token of ["--prc-state-open", "--prc-state-merged", "--prc-state-closed", "--prc-state-draft"]) {
+    const ratio = contrastRatio(colour(base, token), "#ffffff");
+    assert.ok(ratio >= 4.5, `${token} under white text is ${ratio.toFixed(2)}:1`);
+  }
+});
+
 /** Backgrounds that code and prose sit on. */
 const TEXT_BACKGROUNDS = [
   "--prc-bg",

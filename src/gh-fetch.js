@@ -13,7 +13,7 @@ import { repoSlug } from "./pr-ref.js";
  * Because the server's cwd is not the user's repository, every call passes `--repo` explicitly.
  */
 
-/** Fields worth having for the review header. Kept narrow: `gh pr view --json` is not free. */
+/** PR context the canvas needs, kept in the same `gh pr view` call as the existing header metadata. */
 export const PR_VIEW_FIELDS = [
   "number",
   "title",
@@ -28,8 +28,22 @@ export const PR_VIEW_FIELDS = [
   "additions",
   "deletions",
   "author",
+  "body",
+  "createdAt",
+  "updatedAt",
+  "mergedAt",
+  "commits",
   "mergeable",
 ].join(",");
+
+/**
+ * @typedef {object} PullRequestCommit
+ * @property {string} oid
+ * @property {string} messageHeadline
+ * @property {string} authoredDate
+ * @property {string} authorLogin
+ * @property {string} authorName
+ */
 
 /**
  * @typedef {object} PullRequestMeta
@@ -46,6 +60,11 @@ export const PR_VIEW_FIELDS = [
  * @property {number} additions
  * @property {number} deletions
  * @property {string} authorLogin
+ * @property {string} [body]
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ * @property {string} [mergedAt]
+ * @property {PullRequestCommit[]} [commits]
  */
 
 /**
@@ -63,6 +82,7 @@ export async function fetchPullRequest(ref, deps = {}) {
   const ghJsonImpl = deps.ghJsonImpl ?? ghJson;
   /** @type {Record<string, unknown>} */
   const view = await ghJsonImpl(["pr", "view", String(ref.number), "--repo", repoSlug(ref), "--json", PR_VIEW_FIELDS]);
+  const commits = Array.isArray(view.commits) ? view.commits : [];
   return {
     number: Number(view.number ?? ref.number),
     title: String(view.title ?? ""),
@@ -77,6 +97,22 @@ export async function fetchPullRequest(ref, deps = {}) {
     additions: Number(view.additions ?? 0),
     deletions: Number(view.deletions ?? 0),
     authorLogin: String(/** @type {{ login?: unknown }} */ (view.author)?.login ?? ""),
+    body: String(view.body ?? ""),
+    createdAt: String(view.createdAt ?? ""),
+    updatedAt: String(view.updatedAt ?? ""),
+    mergedAt: String(view.mergedAt ?? ""),
+    commits: commits.map((entry) => {
+      const commit = /** @type {Record<string, unknown>} */ (entry);
+      const authors = Array.isArray(commit.authors) ? commit.authors : [];
+      const author = /** @type {Record<string, unknown>} */ (authors[0] ?? {});
+      return {
+        oid: String(commit.oid ?? ""),
+        messageHeadline: String(commit.messageHeadline ?? ""),
+        authoredDate: String(commit.authoredDate ?? ""),
+        authorLogin: String(author.login ?? ""),
+        authorName: String(author.name ?? ""),
+      };
+    }),
   };
 }
 
