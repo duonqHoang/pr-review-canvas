@@ -4,6 +4,7 @@ import { columnsFor, parseLineKey, unifiedTableHtml } from "../shared/diff-rows.
 import { buildFileTree, filterFiles, reviewProgress } from "../shared/file-tree.js";
 import { blobLinkFor, filesViewPermalink } from "../shared/permalink.js";
 import { renderMarkdown } from "../shared/markdown.js";
+import { editMarkdown } from "../shared/markdown-editor.js";
 import { clampRange, describeRange } from "../shared/selection.js";
 import { languageForPath } from "../worker/languages.js";
 
@@ -559,6 +560,20 @@ function onDocumentClick(event) {
     return;
   }
 
+  const editorTab = target.closest("[data-act='editor-tab']");
+  if (editorTab) {
+    const card = editorTab.closest(".prc-composer");
+    if (card) setEditorTab(card, editorTab.getAttribute("data-tab") === "preview" ? "preview" : "write");
+    return;
+  }
+
+  const format = target.closest("[data-act='format']");
+  if (format) {
+    const card = format.closest(".prc-composer");
+    if (card) formatComposer(card, format.getAttribute("data-format") ?? "");
+    return;
+  }
+
   const send = target.closest("[data-act='composer-submit']");
   if (send) {
     const card = send.closest(".prc-composer");
@@ -911,7 +926,24 @@ function openComposer(mode = "comment", options = {}) {
     // line number rather than sitting next to it.
     `${escapeHtml(options.note || `line ${range}${anchor.side === "LEFT" ? " (original)" : ""}`)}</span>` +
     `</div>` +
-    `<textarea class="prc-composer-text" rows="3"></textarea>` +
+    `<div class="prc-editor" data-role="editor">` +
+    `<div class="prc-editor-bar">` +
+    `<div class="prc-editor-tabs" role="tablist" aria-label="Comment editor">` +
+    `<button type="button" class="prc-editor-tab prc-editor-tab-on" data-act="editor-tab" data-tab="write" role="tab" aria-selected="true">Write</button>` +
+    `<button type="button" class="prc-editor-tab" data-act="editor-tab" data-tab="preview" role="tab" aria-selected="false">Preview</button></div>` +
+    `<div class="prc-format-bar" role="toolbar" aria-label="Format comment">` +
+    `<button type="button" data-act="format" data-format="heading" aria-label="Add heading" title="Heading">H</button>` +
+    `<button type="button" data-act="format" data-format="bold" aria-label="Add bold text" title="Bold"><strong>B</strong></button>` +
+    `<button type="button" data-act="format" data-format="italic" aria-label="Add italic text" title="Italic"><em>I</em></button>` +
+    `<button type="button" data-act="format" data-format="code" aria-label="Add inline code" title="Code">&lt;&gt;</button>` +
+    `<button type="button" data-act="format" data-format="link" aria-label="Add link" title="Link">↗</button>` +
+    `<button type="button" data-act="format" data-format="quote" aria-label="Add quote" title="Quote">“</button>` +
+    `<button type="button" data-act="format" data-format="bullet" aria-label="Add bulleted list" title="Bulleted list">•</button>` +
+    `<button type="button" data-act="format" data-format="ordered" aria-label="Add numbered list" title="Numbered list">1.</button>` +
+    `</div></div>` +
+    `<textarea class="prc-composer-text" rows="5" aria-label="Comment body"></textarea>` +
+    `<div class="prc-composer-preview prc-md" data-role="editor-preview" role="tabpanel" hidden></div>` +
+    `</div>` +
     `<div class="prc-suggest" data-role="suggest" hidden>` +
     `<div class="prc-suggest-head"><span>Suggested replacement</span>` +
     `<span class="prc-suggest-meta" data-role="suggest-meta"></span></div>` +
@@ -942,6 +974,36 @@ function openComposer(mode = "comment", options = {}) {
       }
     });
   }
+}
+
+/** @param {Element} card @param {"write" | "preview"} tab */
+function setEditorTab(card, tab) {
+  const area = /** @type {HTMLTextAreaElement | null} */ (card.querySelector(".prc-composer-text"));
+  const preview = /** @type {HTMLElement | null} */ (card.querySelector("[data-role='editor-preview']"));
+  if (!area || !preview) return;
+  for (const button of card.querySelectorAll("[data-act='editor-tab']")) {
+    const active = button.getAttribute("data-tab") === tab;
+    button.classList.toggle("prc-editor-tab-on", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  area.hidden = tab === "preview";
+  preview.hidden = tab !== "preview";
+  if (tab === "preview") {
+    preview.textContent = "";
+    if (area.value.trim()) preview.append(renderBody(area.value));
+    else preview.textContent = "Nothing to preview.";
+  } else area.focus();
+}
+
+/** @param {Element} card @param {string} action */
+function formatComposer(card, action) {
+  const area = /** @type {HTMLTextAreaElement | null} */ (card.querySelector(".prc-composer-text"));
+  if (!area) return;
+  setEditorTab(card, "write");
+  const edit = editMarkdown(area.value, area.selectionStart, area.selectionEnd, action);
+  area.setRangeText(edit.value, 0, area.value.length, "end");
+  area.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+  area.focus();
 }
 
 /**
@@ -1031,7 +1093,7 @@ function refreshComposerHint() {
           : "Cmd/Ctrl+Enter to ask. The answer appears here inline."
         : mode === "suggest"
           ? "Cmd/Ctrl+Enter to save. An empty box means \u201cdelete these lines\u201d."
-          : "Cmd/Ctrl+Enter to save. Drafts stay local until you submit the review.";
+          : "Markdown supported \u00b7 Cmd/Ctrl+Enter to save. Drafts stay local until you submit the review.";
   }
 }
 

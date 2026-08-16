@@ -1902,14 +1902,97 @@ body.prc-dragging {
 
 .prc-composer-text {
   width: 100%;
-  margin: var(--prc-space-2) 0;
+  min-height: 112px;
+  margin: 0;
   font: var(--prc-text) / 1.5 var(--prc-font);
-  padding: var(--prc-space-2);
-  border: 1px solid var(--prc-border);
-  border-radius: var(--prc-radius);
+  padding: var(--prc-space-3);
+  border: 0;
+  border-radius: 0 0 var(--prc-radius) var(--prc-radius);
   background: var(--prc-bg);
   color: var(--prc-fg);
   resize: vertical;
+}
+
+.prc-editor {
+  margin: var(--prc-space-2) 0;
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  overflow: hidden;
+  background: var(--prc-bg);
+}
+
+.prc-editor-bar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: 40px;
+  border-bottom: 1px solid var(--prc-border);
+  background: var(--prc-bg-inset);
+}
+
+.prc-editor-tabs,
+.prc-format-bar {
+  display: flex;
+  align-items: center;
+}
+
+.prc-editor-tab {
+  padding: 0 var(--prc-space-3);
+  border: 0;
+  border-right: 1px solid transparent;
+  background: transparent;
+  color: var(--prc-fg-muted);
+  font: 600 var(--prc-text) / 1 var(--prc-font);
+  cursor: pointer;
+}
+
+.prc-editor-tab-on {
+  margin-bottom: -1px;
+  border-right-color: var(--prc-border);
+  border-bottom: 1px solid var(--prc-bg);
+  background: var(--prc-bg);
+  color: var(--prc-fg);
+}
+
+.prc-format-bar {
+  gap: 2px;
+  padding: 4px;
+}
+
+.prc-format-bar button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--prc-fg-muted);
+  font: 600 var(--prc-text) / 1 var(--prc-font);
+  cursor: pointer;
+}
+
+.prc-format-bar button:hover {
+  background: var(--prc-border-muted);
+  color: var(--prc-fg);
+}
+
+.prc-composer-preview {
+  min-height: 112px;
+  padding: var(--prc-space-3);
+  color: var(--prc-fg);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .prc-editor-bar {
+    flex-wrap: wrap;
+  }
+
+  .prc-format-bar {
+    width: 100%;
+    border-top: 1px solid var(--prc-border-muted);
+    overflow-x: auto;
+  }
 }
 
 .prc-hint {
