@@ -3499,9 +3499,30 @@ function watchHead() {
 
 async function checkHead() {
   const result = await request("/head");
+  applyPrState(result?.state, result?.isDraft);
   if (!result?.changed) return;
   state.headMoved = String(result.headSha ?? "");
   showHeadMovedBanner();
+}
+
+/**
+ * Keep the header honest when a PR is merged or closed without a new head commit.
+ *
+ * @param {unknown} value
+ * @param {unknown} isDraft
+ */
+function applyPrState(value, isDraft) {
+  const prState = String(value ?? "").toUpperCase();
+  if (!["OPEN", "MERGED", "CLOSED"].includes(prState)) return;
+  const draft = isDraft === true && prState === "OPEN";
+  const label = draft ? "DRAFT" : prState;
+  const badge = el("prcPrState");
+  if (badge) {
+    badge.textContent = label;
+    badge.dataset.state = draft ? "draft" : prState.toLowerCase();
+  }
+  state.pr.state = prState;
+  state.pr.isDraft = isDraft === true;
 }
 
 function showHeadMovedBanner() {

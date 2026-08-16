@@ -588,6 +588,6 @@ test("the page ships the whole transcript, not just the last note", async () => 
     assert.equal(bootstrap.pr.commits[0].messageHeadline, "feat: keep review context close");
     assert.match(html, /id="prcOverviewTab"/);
     assert.match(html, /feat: keep review context close/);
-    assert.match(html, /class="prc-state" data-state="open">OPEN/);
+    assert.match(html, /class="prc-state" id="prcPrState" data-state="open">OPEN/);
   });
 });

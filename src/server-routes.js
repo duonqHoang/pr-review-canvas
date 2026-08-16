@@ -9,7 +9,7 @@ import { fetchPullRequest } from "./gh-fetch.js";
 import { fetchExistingThreads } from "./gh-threads.js";
 import { isSameOriginRequest } from "./host-guard.js";
 import { buildQuestionPayload, MAX_QUESTIONS_PER_POLL } from "./qa-excerpt.js";
-import { alertForFetchError, raiseAlert, refreshSession } from "./refresh.js";
+import { alertForFetchError, alertForPrState, raiseAlert, refreshSession } from "./refresh.js";
 import { newId, submitDigest } from "./session-store.js";
 import { buildSnapshot } from "./snapshot.js";
 import { rowsHtml, tableHtml } from "./shared/diff-rows.js";
@@ -1532,6 +1532,7 @@ export function registerRoutes(deps) {
         headSha: head.sha,
         changed: head.sha !== null && head.sha !== session.snapshotHeadSha,
         state: head.state,
+        isDraft: head.isDraft,
         checkedAt: head.at,
         stale: head.stale,
       });
@@ -1894,13 +1895,13 @@ export function registerRoutes(deps) {
    * The last head check per session, so a browser tab polling on a timer does not turn into one
    * `gh pr view` per poll. `null` means the check itself failed.
    *
-   * @type {Map<string, { sha: string | null, state: string, at: string }>}
+   * @type {Map<string, { sha: string | null, state: string, isDraft: boolean | null, at: string }>}
    */
   const headChecks = new Map();
 
   /**
    * @param {import("./session-store.js").Session} session
-   * @returns {Promise<{ sha: string | null, state: string, at: string, stale: boolean }>}
+   * @returns {Promise<{ sha: string | null, state: string, isDraft: boolean | null, at: string, stale: boolean }>}
    */
   async function currentHead(session) {
     const cached = headChecks.get(session.key);
@@ -1915,8 +1916,15 @@ export function registerRoutes(deps) {
         repo: session.pr.repo,
         number: session.pr.number,
       });
-      const record = { sha: pr.headSha, state: pr.state, at };
+      const record = { sha: pr.headSha, state: pr.state, isDraft: pr.isDraft, at };
       headChecks.set(session.key, record);
+      const stateAlert = alertForPrState(pr.state);
+      if (
+        stateAlert &&
+        (await raiseAlert(store, session, stateAlert, `GitHub reports this pull request as ${pr.state}`))
+      ) {
+        await announceAlerts(session.key, { wake: true });
+      }
       return { ...record, stale: false };
     } catch (error) {
       log("head check failed", session.key, error);
@@ -1929,7 +1937,7 @@ export function registerRoutes(deps) {
         }
       }
       // Cached as a failure so a broken network does not mean one `gh` spawn per poll.
-      const record = { sha: /** @type {string | null} */ (null), state: "UNKNOWN", at };
+      const record = { sha: /** @type {string | null} */ (null), state: "UNKNOWN", isDraft: null, at };
       headChecks.set(session.key, record);
       return { ...record, stale: false };
     }
@@ -1974,6 +1982,7 @@ export function registerRoutes(deps) {
     headChecks.set(session.key, {
       sha: outcome.snapshot.headSha,
       state: outcome.snapshot.pr.state,
+      isDraft: outcome.snapshot.pr.isDraft,
       at: new Date().toISOString(),
     });
     // The browser decides what to do with this; there is no `reload` event in this protocol, because

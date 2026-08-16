@@ -105,3 +105,12 @@ test("the drafts push from the server has a listener", () => {
   // the same failure as the one above with a different trigger.
   assert.match(clientSource, /addEventListener\("drafts"/);
 });
+
+test("a head check applies PR state before deciding whether the commit moved", () => {
+  // A merge commonly leaves the head SHA unchanged. Returning before applying the fetched state made
+  // an OPEN badge survive indefinitely on a merged pull request.
+  const check = topLevelFunctions().get("checkHead");
+  assert.ok(check, "checkHead is gone");
+  assert.ok(check.indexOf("applyPrState") < check.indexOf("result?.changed"));
+  assert.match(clientSource, /function applyPrState[\s\S]*prcPrState/);
+});
