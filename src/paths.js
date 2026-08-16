@@ -9,6 +9,7 @@ export const DEFAULT_PORT = 4391;
  * BSD a socket bound to `::` with IPV6_V6ONLY set is not reachable over 127.0.0.1.
  */
 const WILDCARD_BIND_HOSTS = new Set(["0.0.0.0", "::"]);
+const SESSION_KEY_RE = /^[0-9a-f]{16}$/;
 
 /** @param {NodeJS.ProcessEnv} [env] */
 export function bindHost(env = process.env) {
@@ -93,6 +94,10 @@ export function serverLogFile(env = process.env) {
 
 /** @param {string} key @param {NodeJS.ProcessEnv} [env] */
 export function sessionDir(key, env = process.env) {
+  // The key crosses the loopback agent API before it reaches the filesystem. Refusing anything
+  // except the canonical hash prevents a compromised local page from turning that public identifier
+  // into a path traversal outside `sessions/`.
+  if (!SESSION_KEY_RE.test(key)) throw new Error("invalid session key");
   return path.join(stateDir(env), "sessions", key);
 }
 

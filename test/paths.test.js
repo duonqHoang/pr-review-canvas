@@ -75,6 +75,18 @@ test("state paths honour PR_REVIEW_CANVAS_STATE_DIR", () => {
   assert.equal(sessionDir("9f3a1b2c3d4e5f60", env), path.join("/tmp/prc-state", "sessions", "9f3a1b2c3d4e5f60"));
 });
 
+test("a session key cannot escape the state directory", () => {
+  // The agent route is loopback-only, but its key is still request data and must never become a path.
+  assert.throws(
+    () => sessionDir("../../outside", { PR_REVIEW_CANVAS_STATE_DIR: "/tmp/prc-state" }),
+    /invalid session key/,
+  );
+  assert.throws(
+    () => sessionDir("0123456789abcdeG", { PR_REVIEW_CANVAS_STATE_DIR: "/tmp/prc-state" }),
+    /invalid session key/,
+  );
+});
+
 test("baseUrl brackets IPv6 and includes the port", () => {
   assert.equal(baseUrl({ PR_REVIEW_CANVAS_PORT: "4391" }), "http://127.0.0.1:4391");
   assert.equal(baseUrl({ PR_REVIEW_CANVAS_HOST: "::1", PR_REVIEW_CANVAS_PORT: "4391" }), "http://[::1]:4391");
