@@ -68,6 +68,15 @@ svg {
 .skip-link:focus {
   transform: translateY(0);
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
 :focus-visible {
   outline: 3px solid var(--blue);
   outline-offset: 3px;
@@ -115,6 +124,28 @@ footer a,
 .nav-links a:hover,
 footer a:hover {
   color: var(--text);
+}
+.language-picker {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.language-picker svg {
+  width: 16px;
+}
+.language-picker select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: 650 0.78rem var(--font-sans);
 }
 .button {
   min-height: 48px;
@@ -858,6 +889,9 @@ footer {
     display: none;
   }
   .nav .button {
+    margin-left: 0;
+  }
+  .language-picker {
     margin-left: auto;
   }
   .hero {
@@ -957,6 +991,9 @@ footer {
   }
   .nav .button {
     display: none;
+  }
+  .language-picker {
+    padding-inline: 7px;
   }
   .product-frame {
     transform: scale(0.58);
