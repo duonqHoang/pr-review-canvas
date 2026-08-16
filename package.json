@@ -2,6 +2,10 @@
   "name": "pr-review-canvas",
   "version": "0.1.0",
   "description": "Review a GitHub PR in a local GitHub-styled diff canvas, ask your agent inline, and submit the whole review with gh.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/duonqHoang/pr-review-canvas.git"
+  },
   "type": "module",
   "bin": {
     "pr-review-canvas": "dist/cli.mjs"
