@@ -114,3 +114,15 @@ test("a head check applies PR state before deciding whether the commit moved", (
   assert.ok(check.indexOf("applyPrState") < check.indexOf("result?.changed"));
   assert.match(clientSource, /function applyPrState[\s\S]*prcPrState/);
 });
+
+test("a selected line or range exposes a visible PR permalink action", () => {
+  // The `y` shortcut existed first, but an undiscoverable shortcut is not a complete sharing path.
+  // The visible action must resolve from the stored anchor so a range keeps both endpoints.
+  const composer = topLevelFunctions().get("openComposer");
+  const handler = topLevelFunctions().get("onDocumentClick");
+  const permalink = topLevelFunctions().get("reviewPermalinkForAnchor");
+  assert.match(composer ?? "", /data-act="copy-selection-link"/);
+  assert.match(handler ?? "", /const anchor = state\.anchor;[\s\S]*reviewPermalinkForAnchor\(anchor\)/);
+  assert.match(permalink ?? "", /startLine: anchor\.startLine/);
+  assert.match(permalink ?? "", /filesViewPermalink/);
+});
