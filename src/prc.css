@@ -1443,10 +1443,10 @@ body.prc-dragging {
   position: absolute;
   left: 2px;
   top: 1px;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 18px;
   padding: 0;
-  line-height: 22px;
+  line-height: 16px;
   border: 0;
   border-radius: 4px;
   background: var(--prc-accent);
@@ -2625,10 +2625,10 @@ kbd {
   }
   .prc-plus {
     left: 2px;
-    top: 0;
+    top: 1px;
     width: 28px;
-    height: 20px;
-    line-height: 18px;
+    height: 18px;
+    line-height: 16px;
     border: 0;
     border-radius: 4px;
     opacity: 1;
