@@ -13,6 +13,12 @@ updates:
         dependency-type: development
       production-dependencies:
         dependency-type: production
+    ignore:
+      # TypeScript majors can change checkJs inference across the whole JSDoc-typed codebase. Review
+      # those as deliberate migrations instead of hiding one inside a routine dependency group.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
