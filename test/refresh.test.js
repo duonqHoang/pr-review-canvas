@@ -238,6 +238,27 @@ test("the head check is throttled, so a polling tab does not spend one gh call p
   });
 });
 
+test("a merge is raised by the head check even when the head commit did not move", async () => {
+  await withSession(
+    async ({ ui, store, base }) => {
+      const response = await ui("/head");
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.changed, false, "merging does not need a new head commit");
+      assert.equal(body.state, "MERGED");
+
+      const alerts = /** @type {any[]} */ ((await store.load(KEY))?.alerts ?? []);
+      assert.deepEqual(
+        alerts.map((/** @type {any} */ alert) => alert.kind),
+        ["pr-merged"],
+      );
+      const poll = await (await fetch(`${base}/api/agent/poll?key=${KEY}&timeoutMs=0`)).json();
+      assert.equal(poll.alerts[0].kind, "pr-merged");
+    },
+    { nextSnapshot: snapshotOf(PATCH_1, HEAD_1, "MERGED") },
+  );
+});
+
 test("refresh proposes a move and holds the comment out of the review until it is accepted", async () => {
   await withSession(async ({ ui, store, comment }) => {
     const summary = await (await ui("/refresh", { method: "POST" })).json();
