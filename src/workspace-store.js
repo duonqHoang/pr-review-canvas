@@ -67,7 +67,9 @@ export class WorkspaceStore {
     const state = await this.read();
     const id = workspaceId(nameOrId);
     const workspace =
-      state.workspaces[id] ?? Object.values(state.workspaces).find((item) => item.accessId === nameOrId) ?? null;
+      (Object.hasOwn(state.workspaces, id) ? state.workspaces[id] : null) ??
+      Object.values(state.workspaces).find((item) => item.accessId === nameOrId) ??
+      null;
     if (workspace && !workspace.prefs) workspace.prefs = { theme: "system" };
     return workspace;
   }
@@ -79,7 +81,7 @@ export class WorkspaceStore {
         const id = workspaceId(name);
         if (!id) throw new Error("workspace name must contain a letter or number");
         const state = await this.read();
-        if (state.workspaces[id]) throw new Error(`workspace already exists: ${name}`);
+        if (Object.hasOwn(state.workspaces, id)) throw new Error(`workspace already exists: ${name}`);
         const at = new Date().toISOString();
         const workspace = {
           id,
@@ -91,7 +93,14 @@ export class WorkspaceStore {
           createdAt: at,
           updatedAt: at,
         };
-        state.workspaces[id] = workspace;
+        // A workspace named `__proto__` must become ordinary data, never invoke Object.prototype's
+        // legacy setter and replace the map's prototype.
+        Object.defineProperty(state.workspaces, id, {
+          value: workspace,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
         await writeJsonAtomic(workspaceFile(this.env), state);
         return workspace;
       })
@@ -160,7 +169,7 @@ export class WorkspaceStore {
       this.exclusive(async () => {
         const state = await this.read();
         const id = workspaceId(nameOrId);
-        const workspace = state.workspaces[id];
+        const workspace = Object.hasOwn(state.workspaces, id) ? state.workspaces[id] : null;
         if (!workspace) throw new Error(`unknown workspace: ${nameOrId}`);
         mutate(workspace);
         workspace.updatedAt = new Date().toISOString();
