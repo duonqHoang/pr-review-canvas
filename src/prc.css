@@ -1937,6 +1937,7 @@ body.prc-dragging {
 }
 
 .prc-editor-tab {
+  position: relative;
   padding: 0 var(--prc-space-3);
   border: 0;
   border-right: 1px solid transparent;
@@ -1946,12 +1947,28 @@ body.prc-dragging {
   cursor: pointer;
 }
 
+.prc-editor-tab:hover:not(.prc-editor-tab-on) {
+  background: var(--prc-border-muted);
+  color: var(--prc-fg);
+}
+
 .prc-editor-tab-on {
   margin-bottom: -1px;
   border-right-color: var(--prc-border);
   border-bottom: 1px solid var(--prc-bg);
   background: var(--prc-bg);
   color: var(--prc-fg);
+}
+
+.prc-editor-tab-on::after {
+  content: "";
+  position: absolute;
+  right: var(--prc-space-3);
+  bottom: 0;
+  left: var(--prc-space-3);
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--prc-accent);
 }
 
 .prc-format-bar {
