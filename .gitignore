@@ -8,6 +8,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Local agent configuration
+.agents/
+.codex/
+
 # Secrets
 .env
 .env.*

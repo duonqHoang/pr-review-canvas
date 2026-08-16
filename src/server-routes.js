@@ -611,9 +611,22 @@ export function registerRoutes(deps) {
         res.status(404).type("text/plain").send("No review workspace for that link.");
         return;
       }
+      const requestedSource = String(req.query.from ?? "");
+      const sourceSession = requestedSource ? await sessionByAccess(requestedSource) : null;
+      const sourceIsMember = sourceSession
+        ? workspace.members.some((member) => member.sessionKey === sourceSession.key)
+        : false;
+      const theme = sourceIsMember ? String(sourceSession?.prefs?.theme ?? "system") : workspace.prefs.theme;
       res.setHeader("content-security-policy", CSP);
       res.setHeader("referrer-policy", "no-referrer");
-      res.type("html").send(renderWorkspacePage({ workspace, version }));
+      res.type("html").send(
+        renderWorkspacePage({
+          workspace,
+          version,
+          theme,
+          syncTheme: sourceIsMember && theme !== workspace.prefs.theme,
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -627,6 +640,21 @@ export function registerRoutes(deps) {
         return;
       }
       res.json(await workspaceSummary(workspace));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/ui/w/:aid/prefs", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.aid);
+      if (!workspace) {
+        res.status(404).json({ error: "unknown workspace" });
+        return;
+      }
+      const updated = await workspaceStore.setTheme(workspace.id, /** @type {any} */ (req.body ?? {}).theme);
+      events.emit("workspace", workspace.id);
+      res.json({ prefs: updated.prefs });
     } catch (error) {
       next(error);
     }
@@ -703,7 +731,7 @@ export function registerRoutes(deps) {
       const requestedWorkspace = String(req.query.workspace ?? "");
       const workspace = requestedWorkspace ? await workspaceStore.get(requestedWorkspace) : null;
       const workspaceContext = workspace?.members.some((member) => member.sessionKey === session.key)
-        ? { name: workspace.name, url: `/workspace/${workspace.accessId}` }
+        ? { name: workspace.name, url: `/workspace/${workspace.accessId}?from=${encodeURIComponent(session.accessId)}` }
         : null;
       res.type("html").send(
         renderReviewPage({

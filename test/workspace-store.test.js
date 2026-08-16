@@ -36,6 +36,7 @@ test("membership, priority and cross-PR relationships survive a fresh store", as
     await store.create("stack");
     await store.add("stack", ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"]);
     await store.setPriority("stack", "bbbbbbbbbbbbbbbb", 1);
+    await store.setTheme("stack", "dark");
     await store.setRelation("stack", {
       from: "bbbbbbbbbbbbbbbb",
       to: "aaaaaaaaaaaaaaaa",
@@ -46,6 +47,7 @@ test("membership, priority and cross-PR relationships survive a fresh store", as
     const workspace = await reopened.get("stack");
     assert.equal(workspace?.members.length, 2);
     assert.equal(workspace?.members.find((member) => member.sessionKey === "bbbbbbbbbbbbbbbb")?.priority, 1);
+    assert.deepEqual(workspace?.prefs, { theme: "dark" });
     assert.deepEqual(workspace?.relations, [{ from: "bbbbbbbbbbbbbbbb", to: "aaaaaaaaaaaaaaaa", kind: "depends-on" }]);
 
     // Removing membership is intentionally local to the workspace; callers retain both sessions.
@@ -56,6 +58,14 @@ test("membership, priority and cross-PR relationships survive a fresh store", as
       ["bbbbbbbbbbbbbbbb"],
     );
     assert.deepEqual(reduced?.relations, []);
+  });
+});
+
+test("workspace themes fail closed to system", async () => {
+  await withStore(async (store) => {
+    await store.create("theme");
+    await store.setTheme("theme", "solarized");
+    assert.deepEqual((await store.get("theme"))?.prefs, { theme: "system" });
   });
 });
 

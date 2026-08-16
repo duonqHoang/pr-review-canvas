@@ -159,28 +159,39 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
 </header>
 
 <div class="prc-toolbar" data-prc-chrome>
-  <button class="prc-btn prc-btn-quiet" id="prcToggleTree" type="button" aria-expanded="true"
-    aria-controls="prcTree" title="Show or hide the file tree (t)">&#9776; Files</button>
-  <span class="prc-counts">${snapshot.counts.files} files changed &middot;
-    <ins>+${snapshot.counts.additions}</ins> <del>&minus;${snapshot.counts.deletions}</del></span>
-  <span class="prc-spacer"></span>
-  <div class="prc-segmented" role="group" aria-label="Diff layout">
-    <button class="prc-seg" type="button" data-act="layout" data-layout="unified"
-      aria-pressed="${layout === "unified"}">Unified</button>
-    <button class="prc-seg" type="button" data-act="layout" data-layout="split"
-      aria-pressed="${layout === "split"}">Split</button>
+  <div class="prc-toolbar-context">
+    <button class="prc-btn prc-btn-quiet" id="prcToggleTree" type="button" aria-expanded="true"
+      aria-controls="prcTree" title="Show or hide the file tree (t)"><span aria-hidden="true">&#9776;</span> Files</button>
+    <span class="prc-counts">${snapshot.counts.files} files changed &middot;
+      <ins>+${snapshot.counts.additions}</ins> <del>&minus;${snapshot.counts.deletions}</del></span>
   </div>
+  <span class="prc-spacer"></span>
+  <div class="prc-toolbar-controls">
+    <div class="prc-segmented" role="group" aria-label="Diff layout">
+      <button class="prc-seg" type="button" data-act="layout" data-layout="unified"
+        aria-pressed="${layout === "unified"}">Unified</button>
+      <button class="prc-seg" type="button" data-act="layout" data-layout="split"
+        aria-pressed="${layout === "split"}">Split</button>
+    </div>
   <!-- Rendered with the saved choice already applied, and with a word rather than only an icon: the
        three states are system / light / dark, and a lone sun cannot say which of the three is on. -->
   <button class="prc-btn prc-btn-quiet prc-theme" id="prcTheme" type="button"
     data-theme-choice="${escapeHtml(theme)}" title="Theme: ${escapeHtml(theme)} — click to change"
     aria-label="Theme: ${escapeHtml(theme)}"><span class="prc-theme-label">${escapeHtml(themeLabel)}</span></button>
   <button class="prc-btn prc-btn-quiet" id="prcShortcuts" type="button" title="Keyboard shortcuts (?)">?</button>
-  <a class="prc-link" href="${escapeHtml(session.pr.url)}" target="_blank" rel="noreferrer noopener">Open on GitHub</a>
+    <a class="prc-btn prc-btn-quiet prc-toolbar-link" href="${escapeHtml(session.pr.url)}" target="_blank"
+      rel="noreferrer noopener">GitHub <span aria-hidden="true">&#8599;</span></a>
   <!-- Last, on the right: the panel it opens is the right-hand column, so the control sits on the side
        the thing appears. -->
-  <button class="prc-btn prc-btn-quiet" id="prcToggleChat" type="button" aria-expanded="false"
-    aria-controls="prcChat" title="Show or hide the chat with your agent (g)">&#128172; Chat</button>
+    <button class="prc-btn prc-chat-toggle" id="prcToggleChat" type="button" aria-expanded="false"
+      aria-controls="prcChat" title="Show or hide the chat with your agent (g)">
+      <svg class="prc-chat-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+      </svg>
+      <span>Chat</span>
+    </button>
+  </div>
 </div>
 
 <div class="prc-banner" id="prcPresenceBanner" hidden>

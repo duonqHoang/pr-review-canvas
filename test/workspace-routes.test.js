@@ -61,7 +61,12 @@ async function withWorkspace(body) {
 }
 
 test("workspace dashboard reports per-PR counts and overlapping paths", async () => {
-  await withWorkspace(async ({ base, workspace }) => {
+  await withWorkspace(async ({ base, store, workspace }) => {
+    await store.mutate(KEY_A, {
+      op: "prefs:set",
+      at: new Date().toISOString(),
+      payload: { prefs: { theme: "dark" } },
+    });
     const response = await fetch(`${base}/api/ui/w/${workspace.accessId}`);
     assert.equal(response.status, 200);
     const summary = await response.json();
@@ -71,15 +76,26 @@ test("workspace dashboard reports per-PR counts and overlapping paths", async ()
     );
     assert.deepEqual(summary.overlaps, [{ path: "src/shared.js", sessions: [KEY_A, KEY_B] }]);
     assert.equal(summary.members[0].canvasUrl, `/review/access-1?workspace=${workspace.accessId}`);
-    const page = await fetch(`${base}/workspace/${workspace.accessId}`);
+    const page = await fetch(`${base}/workspace/${workspace.accessId}?from=access-1`);
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /prc-workspace\.js/);
+    const pageHtml = await page.text();
+    assert.match(pageHtml, /prc-workspace\.js/);
+    assert.match(pageHtml, /<html lang="en" data-theme="dark">/);
+
+    const saveTheme = await fetch(`${base}/api/ui/w/${workspace.accessId}/prefs`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", origin: base },
+      body: JSON.stringify({ theme: "dark" }),
+    });
+    assert.equal(saveTheme.status, 200);
+    const directPage = await fetch(`${base}/workspace/${workspace.accessId}`);
+    assert.match(await directPage.text(), /<html lang="en" data-theme="dark">/);
 
     const memberCanvas = await fetch(`${base}${summary.members[0].canvasUrl}`);
     assert.equal(memberCanvas.status, 200);
     assert.match(
       await memberCanvas.text(),
-      new RegExp(`href="/workspace/${workspace.accessId}"[^>]*>&larr; release</a>`),
+      new RegExp(`href="/workspace/${workspace.accessId}\\?from=access-1"[^>]*>&larr; release</a>`),
     );
 
     const directCanvas = await fetch(`${base}/review/access-1`);
