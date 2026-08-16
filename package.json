@@ -22,7 +22,7 @@
     "build": "node scripts/build.js",
     "check": "npm run build && node scripts/build-skill.js --check && npm run lint && npm run format:check && npm run typecheck && npm test",
     "start": "node dist/cli.mjs",
-    "lint": "eslint bin src scripts test",
+    "lint": "eslint bin src scripts test docs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",

@@ -32,7 +32,7 @@ export default [
   },
   {
     // Browser-side sources. They must never reach for node globals.
-    files: ["src/client/**/*.js", "src/shared/**/*.js", "src/mermaid/**/*.js"],
+    files: ["src/client/**/*.js", "src/shared/**/*.js", "src/mermaid/**/*.js", "docs/**/*.js"],
     languageOptions: { globals: { ...globals.browser } },
   },
   {
