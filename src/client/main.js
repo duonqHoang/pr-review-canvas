@@ -77,6 +77,7 @@ const state = {
   alerts: Array.isArray(bootstrap.alerts) ? bootstrap.alerts : [],
   /** @type {any[]} */
   chat: Array.isArray(bootstrap.chat) ? bootstrap.chat : [],
+  findings: Array.isArray(bootstrap.findings) ? bootstrap.findings : [],
   chatOpen: false,
   /** Agent replies that arrived while the panel was closed. */
   unreadChat: 0,
@@ -544,6 +545,17 @@ function onDocumentClick(event) {
     const id = revealed.getAttribute("data-id") ?? "";
     state.lastDraftVisited = id;
     revealDraft(id);
+    return;
+  }
+
+  const findingWrite = target.closest("[data-act='finding-write']");
+  if (findingWrite) {
+    openFindingComposer(findingWrite.getAttribute("data-id") ?? "");
+    return;
+  }
+  const findingStatus = target.closest("[data-act='finding-status']");
+  if (findingStatus) {
+    setFindingStatus(findingStatus.getAttribute("data-id") ?? "", findingStatus.getAttribute("data-status") ?? "");
     return;
   }
 
@@ -1656,6 +1668,99 @@ function renderAll() {
   // The sidebar carries draft and question counts per file, so it follows every render.
   renderTree();
   renderDrafts();
+  renderFindings();
+}
+
+function renderFindings() {
+  const host = el("prcFindings");
+  const list = el("prcFindingsList");
+  const count = el("prcFindingsCount");
+  if (!host || !list || !count) return;
+  const findings = /** @type {any[]} */ (state.findings).filter((finding) => finding.status === "open");
+  host.hidden = findings.length === 0;
+  count.textContent = `${findings.length} agent finding${findings.length === 1 ? "" : "s"}`;
+  list.replaceChildren();
+  for (const finding of findings) {
+    const card = document.createElement("article");
+    card.className = "prc-finding";
+    card.dataset.severity = finding.severity;
+    const title = document.createElement("strong");
+    title.textContent = finding.title;
+    const where = document.createElement("span");
+    where.className = "prc-finding-where";
+    const stale = finding.headSha && finding.headSha !== state.pr.headSha;
+    where.textContent = finding.anchor?.path
+      ? `${finding.anchor.path.split("/").at(-1)}${finding.anchor.line ? `:${finding.anchor.line}` : ""}`
+      : "Pull request";
+    if (stale) where.textContent += " · evidence is from an older head";
+    const body = document.createElement("p");
+    body.textContent = finding.body;
+    const actions = document.createElement("div");
+    actions.className = "prc-finding-actions";
+    if (finding.anchor?.line && !stale) actions.append(findingButton("Write comment", "finding-write", finding.id));
+    actions.append(
+      findingButton("Acknowledge", "finding-status", finding.id, "acknowledged"),
+      findingButton("Dismiss", "finding-status", finding.id, "dismissed"),
+    );
+    card.append(title, where, body, actions);
+    list.append(card);
+  }
+}
+
+/** @param {string} label @param {string} act @param {string} id @param {string} [status] */
+function findingButton(label, act, id, status) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "prc-btn prc-btn-quiet";
+  button.dataset.act = act;
+  button.dataset.id = id;
+  if (status) button.dataset.status = status;
+  button.textContent = label;
+  return button;
+}
+
+/** @param {string} id */
+async function openFindingComposer(id) {
+  const finding = /** @type {any[]} */ (state.findings).find((item) => item.id === id);
+  if (!finding?.anchor?.path || !finding.anchor.line) return;
+  const fileIndex = fileIndexForPath(finding.anchor.path);
+  if (fileIndex < 0) return;
+  await mountFile(fileIndex);
+  const side = finding.anchor.side ?? "RIGHT";
+  let selected = null;
+  for (const cell of document.querySelectorAll(`#F${fileIndex} td.prc-code[data-lk]`)) {
+    const parsed = parseLineKey(cell.getAttribute("data-lk") ?? "");
+    const line = side === "LEFT" ? parsed?.oldLine : parsed?.newLine;
+    if (line === finding.anchor.line && cell.getAttribute("data-side") === side) {
+      selected = cell;
+      break;
+    }
+  }
+  const anchor = anchorFromCell(selected);
+  if (!anchor) {
+    jumpToLine(finding.anchor.path, finding.anchor.line, finding.anchor.line);
+    toast("This finding is not on a GitHub-commentable line. Showing the evidence instead.");
+    return;
+  }
+  state.anchor = anchor;
+  paintSelection(anchor);
+  openComposer("comment", { note: `agent finding · line ${finding.anchor.line}` });
+}
+
+/** @param {string} id @param {string} status */
+async function setFindingStatus(id, status) {
+  try {
+    const result = await request(`/findings/${encodeURIComponent(id)}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status }),
+    });
+    const finding = /** @type {any[]} */ (state.findings).find((item) => item.id === id);
+    if (finding && result.finding) Object.assign(finding, result.finding);
+    renderFindings();
+    renderTree();
+  } catch (error) {
+    toast(`Could not update finding: ${error instanceof Error ? error.message : error}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2984,6 +3089,18 @@ function connectEvents() {
     state.alerts = Array.isArray(data.alerts) ? data.alerts : [];
     renderAlerts();
   });
+  events.addEventListener("finding-added", (event) => {
+    const finding = JSON.parse(/** @type {MessageEvent} */ (event).data).finding;
+    if (finding?.id) upsertById(state.findings, finding);
+    renderFindings();
+    renderTree();
+    toast("Your agent added a finding for you to inspect.");
+  });
+  events.addEventListener("finding-updated", (event) => {
+    const finding = JSON.parse(/** @type {MessageEvent} */ (event).data).finding;
+    if (finding?.id) upsertById(state.findings, finding);
+    renderFindings();
+  });
   events.addEventListener("state-sync", (event) => {
     const data = JSON.parse(/** @type {MessageEvent} */ (event).data);
     applyServerState(data);
@@ -3387,6 +3504,7 @@ function applyServerState(data) {
   if (Array.isArray(data.comments)) state.comments = data.comments;
   if (Array.isArray(data.threads)) state.threads = data.threads;
   if (Array.isArray(data.replies)) state.replies = data.replies;
+  if (Array.isArray(data.findings)) state.findings = data.findings;
   if (data.status) state.status = data.status;
   // Nothing to announce on a plain state sync: `chat-message` is what says a reply just arrived, and
   // treating a reconnect's hydration as new mail would re-announce the same message on every refetch.

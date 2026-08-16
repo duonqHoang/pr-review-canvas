@@ -120,6 +120,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
     // The whole transcript, not just the latest note: a conversation the page cannot replay is a
     // conversation the user loses on every reload.
     chat: session.chat,
+    findings: session.findings,
   };
 
   const panels = snapshot.files
@@ -212,6 +213,10 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
         aria-controls="prcDraftsList"><span class="prc-drafts-caret" aria-hidden="true">▼</span>
         <span id="prcDraftsCount"></span></button>
       <ul class="prc-drafts-list" id="prcDraftsList"></ul>
+    </section>
+    <section class="prc-findings" id="prcFindings" aria-label="Agent findings" hidden>
+      <div class="prc-findings-head"><span id="prcFindingsCount"></span></div>
+      <div class="prc-findings-list" id="prcFindingsList"></div>
     </section>
     <div class="prc-tree-body" id="prcTreeBody"></div>
     <div class="prc-tree-foot" id="prcTreeProgress"></div>

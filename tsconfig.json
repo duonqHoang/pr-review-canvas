@@ -15,5 +15,10 @@
     "types": ["node"]
   },
   "include": ["bin/**/*.js", "src/**/*.js", "scripts/**/*.js", "test/**/*.js"],
-  "exclude": ["src/client/prc-client.js", "src/client/prc-hl-worker.js", "src/client/prc-mermaid.js"]
+  "exclude": [
+    "src/client/prc-client.js",
+    "src/client/prc-workspace.js",
+    "src/client/prc-hl-worker.js",
+    "src/client/prc-mermaid.js"
+  ]
 }

@@ -25,6 +25,8 @@ build/
 # assets relative to its own directory, which is src/ when running from source.
 src/client/prc-client.js
 src/client/prc-client.js.map
+src/client/prc-workspace.js
+src/client/prc-workspace.js.map
 # The syntax-highlighting worker, with highlight.js and its grammars vendored in (~167 kB minified).
 src/client/prc-hl-worker.js
 src/client/prc-mermaid.js

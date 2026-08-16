@@ -5,7 +5,15 @@ import globals from "globals";
 export default [
   // The generated browser bundles are not source. They live under src/ so the server can serve them
   // straight from the source tree in development, which is why they need naming here.
-  { ignores: ["dist/**", "src/client/prc-client.js", "src/client/prc-hl-worker.js", "src/client/prc-mermaid.js"] },
+  {
+    ignores: [
+      "dist/**",
+      "src/client/prc-client.js",
+      "src/client/prc-workspace.js",
+      "src/client/prc-hl-worker.js",
+      "src/client/prc-mermaid.js",
+    ],
+  },
   js.configs.recommended,
   prettier,
   {
