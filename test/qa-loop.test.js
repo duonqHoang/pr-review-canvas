@@ -59,6 +59,19 @@ async function withSession(body) {
       headSha: HEAD_SHA,
       baseSha: "0".repeat(40),
       authorLogin: "someone",
+      body: "## Why\n\nThe pull request context belongs beside the diff.",
+      createdAt: "2026-08-01T10:00:00Z",
+      updatedAt: "2026-08-02T11:00:00Z",
+      mergedAt: "",
+      commits: [
+        {
+          oid: HEAD_SHA,
+          messageHeadline: "feat: keep review context close",
+          authoredDate: "2026-08-01T09:00:00Z",
+          authorLogin: "someone",
+          authorName: "Someone",
+        },
+      ],
       url: `https://github.com/${REF.owner}/${REF.repo}/pull/219`,
       changedFiles: files219.length,
       additions: 0,
@@ -567,5 +580,13 @@ test("the page ships the whole transcript, not just the last note", async () => 
       bootstrap.chat.map((/** @type {any} */ entry) => entry.text),
       ["first", "second"],
     );
+    // PR context must survive the same server-rendered bootstrap. If it is fetched but omitted here,
+    // the Overview tab silently looks empty after every open or reload.
+    assert.match(bootstrap.pr.body, /pull request context/);
+    assert.equal(bootstrap.pr.authorLogin, "someone");
+    assert.equal(bootstrap.pr.createdAt, "2026-08-01T10:00:00Z");
+    assert.equal(bootstrap.pr.commits[0].messageHeadline, "feat: keep review context close");
+    assert.match(html, /id="prcOverviewTab"/);
+    assert.match(html, /feat: keep review context close/);
   });
 });

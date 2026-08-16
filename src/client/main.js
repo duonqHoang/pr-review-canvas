@@ -87,6 +87,9 @@ const state = {
 
 const api = `/api/ui/s/${encodeURIComponent(state.accessId)}`;
 
+/** The diff keeps its own scroll position while the reader checks PR context. */
+let reviewScrollY = 0;
+
 /** @param {string} id */
 const el = (id) => document.getElementById(id);
 
@@ -116,6 +119,57 @@ function restore(name) {
     return window.sessionStorage?.getItem(`prc:${state.pr.ref}:${name}`) ?? null;
   } catch {
     return null;
+  }
+}
+
+/** @param {"review" | "overview"} view @param {{ restoreScroll?: boolean }} [options] */
+function setView(view, options = {}) {
+  if (document.body.dataset.view === view) return;
+  const overview = view === "overview";
+  if (overview) reviewScrollY = window.scrollY;
+  const reviewTab = el("prcReviewTab");
+  const overviewTab = el("prcOverviewTab");
+  reviewTab?.setAttribute("aria-selected", overview ? "false" : "true");
+  reviewTab?.setAttribute("tabindex", overview ? "-1" : "0");
+  overviewTab?.setAttribute("aria-selected", overview ? "true" : "false");
+  overviewTab?.setAttribute("tabindex", overview ? "0" : "-1");
+  for (const id of ["prcReviewToolbar", "prcReviewView", "prcReviewBar"]) {
+    const node = /** @type {HTMLElement | null} */ (el(id));
+    if (node) node.hidden = overview;
+  }
+  const overviewPanel = /** @type {HTMLElement | null} */ (el("prcOverview"));
+  if (overviewPanel) overviewPanel.hidden = !overview;
+  document.body.dataset.view = view;
+  store("view", view);
+  syncChromeHeight();
+  if (options.restoreScroll !== false) window.scrollTo({ top: overview ? 0 : reviewScrollY });
+}
+
+function renderOverview() {
+  const host = el("prcOverviewBody");
+  const empty = /** @type {HTMLElement | null} */ (el("prcOverviewEmpty"));
+  const body = String(state.pr.body ?? "").trim();
+  if (host && body) host.append(renderBody(body));
+  if (empty) empty.hidden = Boolean(body);
+  const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  for (const node of document.querySelectorAll("time[data-prc-relative]")) {
+    const time = /** @type {HTMLTimeElement} */ (node);
+    const date = new Date(time.dateTime);
+    if (Number.isNaN(date.valueOf())) continue;
+    const seconds = Math.round((date.valueOf() - Date.now()) / 1000);
+    const units = [
+      ["year", 31_536_000],
+      ["month", 2_592_000],
+      ["day", 86_400],
+      ["hour", 3_600],
+      ["minute", 60],
+    ];
+    const unit = units.find(([, size]) => Math.abs(seconds) >= Number(size)) ?? ["second", 1];
+    time.textContent = relative.format(
+      Math.round(seconds / Number(unit[1])),
+      /** @type {Intl.RelativeTimeFormatUnit} */ (unit[0]),
+    );
+    time.title = date.toLocaleString();
   }
 }
 
@@ -3736,6 +3790,18 @@ el("prcSubmitCancel")?.addEventListener("click", () => {
   /** @type {HTMLDialogElement | null} */ (el("prcSubmitDialog"))?.close();
 });
 el("prcToggleTree")?.addEventListener("click", () => toggleTree());
+el("prcReviewTab")?.addEventListener("click", () => setView("review"));
+el("prcOverviewTab")?.addEventListener("click", () => setView("overview"));
+for (const tab of document.querySelectorAll(".prc-view-tab")) {
+  tab.addEventListener("keydown", (event) => {
+    const key = /** @type {KeyboardEvent} */ (event);
+    if (key.key !== "ArrowLeft" && key.key !== "ArrowRight") return;
+    key.preventDefault();
+    const view = tab.id === "prcReviewTab" ? "overview" : "review";
+    setView(view);
+    el(view === "review" ? "prcReviewTab" : "prcOverviewTab")?.focus();
+  });
+}
 el("prcDraftsToggle")?.addEventListener("click", () => {
   const list = el("prcDraftsList");
   const toggle = el("prcDraftsToggle");
@@ -3827,6 +3893,8 @@ el("prcTreeFilter")?.addEventListener("keydown", (event) => {
 });
 
 watchChromeHeight();
+renderOverview();
+setView(restore("view") === "overview" ? "overview" : "review", { restoreScroll: false });
 observeFiles();
 renderAll();
 renderTree();
