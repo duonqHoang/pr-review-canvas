@@ -3,6 +3,8 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  pull_request:
+    types: [closed]
   workflow_dispatch:
     inputs:
       release_type:
@@ -19,19 +21,16 @@ concurrency:
   group: npm-release
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  id-token: write
-
 jobs:
-  publish:
-    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+  prepare:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
-      - name: Check out the release
+      - name: Check out the default branch
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -43,12 +42,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Verify existing release version
-        if: ${{ github.event_name == 'release' }}
-        run: node -e 'const expected = `v${require("./package.json").version}`; if (process.env.RELEASE_TAG !== expected) { throw new Error(`Release tag ${process.env.RELEASE_TAG} does not match ${expected}`); }'
-
       - name: Prepare new release version
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           RELEASE_TYPE: ${{ inputs.release_type }}
@@ -80,35 +74,88 @@ jobs:
       - name: Check package
         run: npm run check
 
-      - name: Commit release version
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Open release pull request
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          release_branch="release/$RELEASE_TAG"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$release_branch"
           git add package.json package-lock.json
-          if ! git diff --cached --quiet; then
-            git commit -m "release: $RELEASE_TAG"
-            git push origin "HEAD:$DEFAULT_BRANCH"
+          git commit -m "release: $RELEASE_TAG"
+          git push origin "$release_branch"
+          gh pr create \
+            --base "$DEFAULT_BRANCH" \
+            --head "$release_branch" \
+            --title "release: $RELEASE_TAG" \
+            --body "Bump the package version to $RELEASE_TAG. Merging this PR creates the tag and GitHub Release, then publishes the package to npm."
+
+  publish:
+    if: >-
+      ${{
+        (github.event_name == 'release' && !github.event.release.prerelease) ||
+        (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.head_ref, 'release/v'))
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Resolve release version
+        env:
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PR_BRANCH: ${{ github.head_ref }}
+        run: |
+          package_version=$(node -p 'require("./package.json").version')
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            release_tag=${PR_BRANCH#release/}
+          else
+            release_tag=$EVENT_RELEASE_TAG
           fi
-          echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          if [[ "$release_tag" != "v$package_version" ]]; then
+            echo "Release tag $release_tag does not match package version v$package_version." >&2
+            exit 1
+          fi
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check package
+        run: npm run check
 
       - name: Create tag and GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          release_commit=$(git rev-parse HEAD)
           if tagged_commit=$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null); then
-            if [[ "$tagged_commit" != "$RELEASE_COMMIT" ]]; then
-              echo "$RELEASE_TAG already points to $tagged_commit instead of $RELEASE_COMMIT" >&2
+            if [[ "$tagged_commit" != "$release_commit" ]]; then
+              echo "$RELEASE_TAG already points to $tagged_commit instead of $release_commit" >&2
               exit 1
             fi
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "$RELEASE_TAG already exists at this commit; reusing it."
           else
-            gh release create "$RELEASE_TAG" --target "$RELEASE_COMMIT" --generate-notes
+            gh release create "$RELEASE_TAG" --target "$release_commit" --generate-notes
           fi
 
       - name: Publish package
