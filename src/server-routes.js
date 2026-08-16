@@ -700,9 +700,21 @@ export function registerRoutes(deps) {
       res.setHeader("content-security-policy", CSP);
       res.setHeader("referrer-policy", "no-referrer");
       const threads = await store.loadThreads(session.key);
-      res
-        .type("html")
-        .send(renderReviewPage({ session, snapshot, threads, clientScript: "/assets/prc-client.js", version }));
+      const requestedWorkspace = String(req.query.workspace ?? "");
+      const workspace = requestedWorkspace ? await workspaceStore.get(requestedWorkspace) : null;
+      const workspaceContext = workspace?.members.some((member) => member.sessionKey === session.key)
+        ? { name: workspace.name, url: `/workspace/${workspace.accessId}` }
+        : null;
+      res.type("html").send(
+        renderReviewPage({
+          session,
+          snapshot,
+          threads,
+          clientScript: "/assets/prc-client.js",
+          version,
+          workspace: workspaceContext,
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -1770,7 +1782,7 @@ export function registerRoutes(deps) {
         key: session.key,
         ref: session.pr.ref,
         title: snapshot?.pr.title ?? "",
-        canvasUrl: `/review/${session.accessId}`,
+        canvasUrl: `/review/${session.accessId}?workspace=${encodeURIComponent(workspace.accessId)}`,
         priority: member.priority,
         status: session.status,
         files,

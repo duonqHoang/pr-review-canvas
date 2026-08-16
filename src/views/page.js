@@ -34,9 +34,10 @@ export const THEMES = ["system", "light", "dark"];
  * @param {string} input.clientScript
  * @param {string} input.version
  * @param {import("../gh-threads.js").ThreadsSnapshot | null} [input.threads] existing PR threads
+ * @param {{ name: string, url: string } | null} [input.workspace] verified workspace navigation context
  * @returns {string}
  */
-export function renderReviewPage({ session, snapshot, clientScript, version, threads }) {
+export function renderReviewPage({ session, snapshot, clientScript, version, threads, workspace = null }) {
   const pr = snapshot.pr;
   const title = `${pr.title} · ${session.pr.ref}`;
   const existingThreads = threads?.threads ?? [];
@@ -147,6 +148,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
 <a class="prc-skip" href="#prcFiles">Skip to changed files</a>
 
 <header class="prc-header" data-prc-chrome>
+  ${workspace ? `<a class="prc-workspace-back" href="${escapeHtml(workspace.url)}">&larr; ${escapeHtml(workspace.name)}</a>` : ""}
   <h1 class="prc-pr-title">${escapeHtml(pr.title)} <span class="prc-pr-num">#${pr.number}</span></h1>
   <span class="prc-state">${escapeHtml(pr.state)}</span>
   <span class="prc-refs"><code>${escapeHtml(pr.baseRefName)}</code> &larr; <code>${escapeHtml(pr.headRefName)}</code></span>

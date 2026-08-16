@@ -198,6 +198,19 @@ body.prc {
   min-height: var(--prc-header-h);
 }
 
+.prc-workspace-back {
+  color: var(--prc-accent);
+  flex: 0 0 auto;
+  font-size: var(--prc-text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.prc-workspace-back:hover {
+  text-decoration: underline;
+}
+
 /* The toolbar sticks below the header, so the layout toggle, the file filter and the chat button stay
    reachable however far down the diff you are. Its offset is measured rather than assumed: the header
    holds the pull request title, which wraps on a narrow window, so its height is not knowable here. */

@@ -70,9 +70,23 @@ test("workspace dashboard reports per-PR counts and overlapping paths", async ()
       ["o/r#1", "o/r#2"],
     );
     assert.deepEqual(summary.overlaps, [{ path: "src/shared.js", sessions: [KEY_A, KEY_B] }]);
+    assert.equal(summary.members[0].canvasUrl, `/review/access-1?workspace=${workspace.accessId}`);
     const page = await fetch(`${base}/workspace/${workspace.accessId}`);
     assert.equal(page.status, 200);
     assert.match(await page.text(), /prc-workspace\.js/);
+
+    const memberCanvas = await fetch(`${base}${summary.members[0].canvasUrl}`);
+    assert.equal(memberCanvas.status, 200);
+    assert.match(
+      await memberCanvas.text(),
+      new RegExp(`href="/workspace/${workspace.accessId}"[^>]*>&larr; release</a>`),
+    );
+
+    const directCanvas = await fetch(`${base}/review/access-1`);
+    assert.doesNotMatch(await directCanvas.text(), /prc-workspace-back/);
+
+    const unrelatedCanvas = await fetch(`${base}/review/access-1?workspace=not-a-workspace`);
+    assert.doesNotMatch(await unrelatedCanvas.text(), /prc-workspace-back/);
 
     const crossOriginRefresh = await fetch(`${base}/api/ui/w/${workspace.accessId}/refresh`, {
       method: "POST",
