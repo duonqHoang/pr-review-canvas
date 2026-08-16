@@ -2860,6 +2860,7 @@ function renderReviewBar() {
     // Blocked while the agent is mid-work, mirroring lavish's presence gate: the agent is the one
     // that will perform the submit, so arming a second one would race it.
     button.disabled = state.submitting || state.presence === "working" || state.status === "ended";
+    button.textContent = count > 0 ? `Review ${count} comment${count === 1 ? "" : "s"}` : "Finish review";
   }
 }
 
@@ -3739,6 +3740,15 @@ el("prcChatText")?.addEventListener("keydown", (event) => {
 });
 el("prcShortcuts")?.addEventListener("click", () => {
   /** @type {HTMLDialogElement | null} */ (el("prcShortcutsDialog"))?.showModal();
+});
+el("prcShortcutsMobile")?.addEventListener("click", () => {
+  /** @type {HTMLDialogElement | null} */ (el("prcShortcutsDialog"))?.showModal();
+  /** @type {HTMLDetailsElement | null} */ (document.querySelector(".prc-toolbar-more"))?.removeAttribute("open");
+});
+el("prcCopyPollCommand")?.addEventListener("click", () => {
+  const command = el("prcPollCommand")?.textContent ?? "";
+  if (!command) return;
+  copyText(command, "Agent command copied");
 });
 // Cycles rather than opening a menu: three states, and the one the reader wants is at most two
 // clicks away with nothing to aim at.

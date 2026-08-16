@@ -54,10 +54,10 @@ function render(data) {
   if (summary) {
     summary.classList.remove("prc-workspace-summary-error");
     summary.replaceChildren(
-      summaryStat("Pull requests", members.length, "in this workspace"),
-      summaryStat("Open questions", totals.openQuestions ?? 0, "waiting for the agent"),
-      summaryStat("Open findings", totals.openFindings ?? 0, "need a decision"),
-      summaryStat("Draft comments", totals.draftComments ?? 0, "saved, not submitted"),
+      summaryStat("Pull requests", members.length, "in this workspace", "neutral"),
+      summaryStat("Open questions", totals.openQuestions ?? 0, "waiting for the agent", "attention"),
+      summaryStat("Open findings", totals.openFindings ?? 0, "need a decision", "attention"),
+      summaryStat("Draft comments", totals.draftComments ?? 0, "saved, not submitted", "attention"),
     );
   }
 
@@ -133,14 +133,21 @@ function memberCard(member) {
   const nextLabel = document.createElement("strong");
   nextLabel.append(text("Next: "));
   next.append(nextLabel, text(member.nextAction));
-  card.append(head, meta, progress, counts, next);
+  const continueLink = document.createElement("a");
+  continueLink.className = "prc-btn prc-btn-primary prc-workspace-continue";
+  continueLink.href = member.canvasUrl;
+  continueLink.append(
+    text(member.alerts || member.openQuestions || member.openFindings ? "Resolve next action" : "Continue review"),
+  );
+  card.append(head, next, meta, progress, counts, continueLink);
   return card;
 }
 
-/** @param {string} label @param {string | number} value @param {string} hint */
-function summaryStat(label, value, hint) {
+/** @param {string} label @param {string | number} value @param {string} hint @param {string} tone */
+function summaryStat(label, value, hint, tone) {
   const item = document.createElement("div");
   item.className = "prc-workspace-stat";
+  item.dataset.tone = Number(value) > 0 ? tone : "quiet";
   const number = document.createElement("strong");
   number.append(text(String(value)));
   const name = document.createElement("span");

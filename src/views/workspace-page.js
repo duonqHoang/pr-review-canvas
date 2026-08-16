@@ -45,7 +45,7 @@ export function renderWorkspacePage({ workspace, version, theme = "system", sync
     </div>
     <div class="prc-workspace-actions">
       <button class="prc-btn prc-btn-quiet" id="prcWorkspaceRefresh" type="button">Refresh dashboard</button>
-      <button class="prc-btn prc-btn-primary" id="prcWorkspaceRefreshPrs" type="button">Refresh all PRs</button>
+      <button class="prc-btn prc-btn-quiet" id="prcWorkspaceRefreshPrs" type="button">Refresh all PRs</button>
     </div>
   </section>
   <section class="prc-workspace-summary" id="prcWorkspaceSummary" aria-label="Workspace overview" aria-live="polite">
