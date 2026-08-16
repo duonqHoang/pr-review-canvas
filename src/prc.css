@@ -198,6 +198,19 @@ body.prc {
   min-height: var(--prc-header-h);
 }
 
+.prc-workspace-back {
+  color: var(--prc-accent);
+  flex: 0 0 auto;
+  font-size: var(--prc-text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.prc-workspace-back:hover {
+  text-decoration: underline;
+}
+
 /* The toolbar sticks below the header, so the layout toggle, the file filter and the chat button stay
    reachable however far down the diff you are. Its offset is measured rather than assumed: the header
    holds the pull request title, which wraps on a narrow window, so its height is not knowable here. */
@@ -1968,6 +1981,121 @@ kbd {
   border-radius: 4px;
   padding: 1px 4px;
   background: var(--prc-bg-inset);
+}
+
+/* ---- agent findings ---- */
+
+.prc-findings {
+  border-bottom: 1px solid var(--prc-border-muted);
+  padding: var(--prc-space-2);
+}
+.prc-findings-head {
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+  font-weight: 600;
+  margin-bottom: var(--prc-space-2);
+}
+.prc-findings-list {
+  display: grid;
+  gap: var(--prc-space-2);
+}
+.prc-finding {
+  border: 1px solid var(--prc-border);
+  border-left: 3px solid var(--prc-attention, #bf8700);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-2);
+  min-width: 0;
+}
+.prc-finding[data-severity="critical"],
+.prc-finding[data-severity="high"] {
+  border-left-color: var(--prc-danger, #cf222e);
+}
+.prc-finding-where {
+  display: block;
+  color: var(--prc-fg-muted);
+  font: 11px var(--prc-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prc-finding p {
+  margin: var(--prc-space-1) 0 var(--prc-space-2);
+  white-space: pre-wrap;
+}
+.prc-finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--prc-space-1);
+}
+
+/* ---- multi-PR workspace ---- */
+
+.prc-workspace-main {
+  width: min(1200px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: var(--prc-space-4) 0 64px;
+}
+.prc-workspace-summary {
+  background: var(--prc-bg-inset);
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-3);
+  margin-bottom: var(--prc-space-4);
+}
+.prc-workspace-section-head,
+.prc-workspace-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+}
+.prc-workspace-section-head h2 {
+  margin-right: auto;
+}
+.prc-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--prc-space-3);
+}
+.prc-workspace-card {
+  border: 1px solid var(--prc-border);
+  border-radius: var(--prc-radius);
+  padding: var(--prc-space-3);
+  background: var(--prc-bg);
+}
+.prc-workspace-card[data-status="ended"] {
+  opacity: 0.7;
+}
+.prc-workspace-card-title {
+  color: var(--prc-accent);
+  font-weight: 600;
+  margin-right: auto;
+}
+.prc-workspace-card-meta,
+.prc-workspace-next {
+  color: var(--prc-fg-muted);
+  font-size: var(--prc-text-sm);
+}
+.prc-workspace-card progress {
+  width: 100%;
+  margin: var(--prc-space-3) 0;
+}
+.prc-workspace-card-counts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--prc-space-2);
+  font-size: var(--prc-text-sm);
+}
+.prc-workspace-relations,
+.prc-workspace-overlaps {
+  display: grid;
+  gap: var(--prc-space-1);
+}
+.prc-workspace-relation,
+.prc-workspace-overlap {
+  border-bottom: 1px solid var(--prc-border-muted);
+  padding: var(--prc-space-2) 0;
+  font-family: var(--prc-mono);
+  font-size: var(--prc-text-sm);
 }
 
 @media (max-width: 1000px) {

@@ -11,6 +11,7 @@ import {
 } from "./paths.js";
 import { registerRoutes } from "./server-routes.js";
 import { SessionStore } from "./session-store.js";
+import { WorkspaceStore } from "./workspace-store.js";
 
 export const APP_NAME = "pr-review-canvas";
 
@@ -24,6 +25,7 @@ export const APP_NAME = "pr-review-canvas";
  * @property {number | null} [idleTimeoutMs]
  * @property {boolean} [debug]
  * @property {import("./session-store.js").SessionStore} [store] test seam
+ * @property {import("./workspace-store.js").WorkspaceStore} [workspaceStore] test seam
  * @property {import("./server-routes.js").RouteSeams} [seams] test seams for the routes that call gh
  * @property {NodeJS.ProcessEnv} [env]
  */
@@ -68,6 +70,7 @@ export async function serve(options = {}) {
   const deliveredWork = new Set();
 
   const store = options.store ?? new SessionStore({ env: options.env });
+  const workspaceStore = options.workspaceStore ?? new WorkspaceStore(options.env);
 
   const allowedHostnames = buildAllowedHostnames({ host, linkHost: link, allowedHosts: allowedHostList });
   const skipHostCheck = allowsAllHosts(allowedHostList);
@@ -106,6 +109,7 @@ export async function serve(options = {}) {
   registerRoutes({
     app,
     store,
+    workspaceStore,
     events,
     sseClients,
     activePolls,

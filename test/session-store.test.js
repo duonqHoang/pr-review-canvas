@@ -646,6 +646,35 @@ test("the index lists sessions with counts and never holds draft bodies", async 
   });
 });
 
+test("agent findings persist separately and never become review comments", async () => {
+  await withStore(async ({ store }) => {
+    await seed(store);
+    const finding = {
+      id: "f_1",
+      title: "Unchecked fallback",
+      body: "The fallback bypasses validation.",
+      severity: /** @type {const} */ ("high"),
+      confidence: 0.8,
+      anchor: { path: "src/a.js", side: /** @type {const} */ ("RIGHT"), line: 10 },
+      headSha: "sha-head",
+      status: /** @type {const} */ ("open"),
+      createdAt: "t1",
+      updatedAt: "t1",
+    };
+    await store.mutate(KEY, { op: "finding:add", at: "t1", payload: { finding } });
+    await store.mutate(KEY, {
+      op: "finding:status",
+      at: "t2",
+      payload: { id: finding.id, status: "acknowledged" },
+    });
+    store.invalidate();
+    const loaded = await store.load(KEY);
+    assert.equal(loaded?.findings[0].status, "acknowledged");
+    assert.deepEqual(loaded?.comments, []);
+    assert.equal(JSON.stringify(loaded?.review).includes(finding.body), false);
+  });
+});
+
 test("a snapshot survives a round trip and its path index is rebuilt", async () => {
   await withStore(async ({ store }) => {
     await seed(store);

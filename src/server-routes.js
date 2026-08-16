@@ -14,6 +14,7 @@ import { newId, submitDigest } from "./session-store.js";
 import { buildSnapshot } from "./snapshot.js";
 import { rowsHtml, tableHtml } from "./shared/diff-rows.js";
 import { PRERENDER_FILE_COUNT, renderReviewPage, THEMES } from "./views/page.js";
+import { renderWorkspacePage } from "./views/workspace-page.js";
 
 /**
  * The route table.
@@ -58,6 +59,7 @@ const ASSETS = {
   "prc.css": { file: "prc.css", type: "text/css; charset=utf-8" },
   "prc-hl.css": { file: "prc-hl.css", type: "text/css; charset=utf-8" },
   "prc-client.js": { file: path.join("client", "prc-client.js"), type: "text/javascript; charset=utf-8" },
+  "prc-workspace.js": { file: path.join("client", "prc-workspace.js"), type: "text/javascript; charset=utf-8" },
   "prc-hl-worker.js": { file: path.join("client", "prc-hl-worker.js"), type: "text/javascript; charset=utf-8" },
   // Fetched only when a diagram appears; see scripts/build.js pass 4.
   "prc-mermaid.js": { file: path.join("client", "prc-mermaid.js"), type: "text/javascript; charset=utf-8" },
@@ -91,6 +93,7 @@ const CSP = [
  * @param {object} deps
  * @param {import("express").Express} deps.app
  * @param {import("./session-store.js").SessionStore} deps.store
+ * @param {import("./workspace-store.js").WorkspaceStore} deps.workspaceStore
  * @param {import("node:events").EventEmitter} deps.events
  * @param {Set<import("express").Response>} deps.sseClients
  * @param {Map<string, number>} deps.activePolls
@@ -103,7 +106,8 @@ const CSP = [
  * @param {typeof fetchPullRequest} [deps.fetchPullRequestImpl] test seam
  */
 export function registerRoutes(deps) {
-  const { app, store, events, sseClients, activePolls, deliveredWork, refreshIdleTimer, version, log } = deps;
+  const { app, store, workspaceStore, events, sseClients, activePolls, deliveredWork, refreshIdleTimer, version, log } =
+    deps;
   // The three network calls a route can make. Injected rather than imported at the call site so a
   // server test can exercise refresh end to end without `gh` and without a network.
   const buildSnapshotImpl = deps.buildSnapshotImpl ?? buildSnapshot;
@@ -187,6 +191,68 @@ export function registerRoutes(deps) {
     }
   });
 
+  app.post("/api/agent/workspaces", async (req, res, next) => {
+    try {
+      const name = String(/** @type {any} */ (req.body ?? {}).name ?? "").trim();
+      const workspace = await workspaceStore.create(name);
+      res.status(201).json(workspace);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/agent/workspaces/:id/members", async (req, res, next) => {
+    try {
+      const keys = Array.isArray(/** @type {any} */ (req.body ?? {}).sessionKeys)
+        ? /** @type {any} */ (req.body).sessionKeys.map(String)
+        : [];
+      for (const key of keys) {
+        if (!(await store.load(key))) {
+          res.status(404).json({ error: `unknown session: ${key}` });
+          return;
+        }
+      }
+      const workspace = await workspaceStore.add(req.params.id, keys);
+      events.emit("workspace", workspace.id);
+      res.json(workspace);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/agent/workspaces/:id/members", async (req, res, next) => {
+    try {
+      const keys = Array.isArray(/** @type {any} */ (req.body ?? {}).sessionKeys)
+        ? /** @type {any} */ (req.body).sessionKeys.map(String)
+        : [];
+      const workspace = await workspaceStore.remove(req.params.id, keys);
+      events.emit("workspace", workspace.id);
+      res.json(workspace);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/agent/workspaces/:id/relations", async (req, res, next) => {
+    try {
+      const body = /** @type {any} */ (req.body ?? {});
+      const kind = String(body.kind);
+      if (!["depends-on", "supersedes", "alternative-to"].includes(kind)) {
+        res.status(422).json({ error: "unknown relationship kind" });
+        return;
+      }
+      const workspace = await workspaceStore.setRelation(req.params.id, {
+        from: String(body.from),
+        to: String(body.to),
+        kind: /** @type {"depends-on" | "supersedes" | "alternative-to"} */ (kind),
+      });
+      events.emit("workspace", workspace.id);
+      res.json(workspace);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/agent/poll", async (req, res, next) => {
     try {
       const key = String(req.query.key ?? "");
@@ -250,6 +316,132 @@ export function registerRoutes(deps) {
       };
       events.on("work", onWork);
       req.on("close", cleanup);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/agent/workspace-poll", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(String(req.query.workspace ?? ""));
+      if (!workspace) {
+        res.status(404).json({ error: "unknown workspace" });
+        return;
+      }
+      const memberKeys = workspace.members.map((member) => member.sessionKey);
+      const timeoutMs =
+        req.query.timeoutMs === undefined ? null : Math.max(0, Math.min(Number(req.query.timeoutMs || 0), 2147483647));
+      const immediate = await takeWorkspaceWork(workspace);
+      if (immediate.status !== "waiting") {
+        res.json(immediate);
+        return;
+      }
+
+      const streaming = timeoutMs === null;
+      /** @type {NodeJS.Timeout | null} */
+      let heartbeat = null;
+      if (streaming) {
+        res.status(200).type("application/json");
+        res.write(" ");
+        heartbeat = setInterval(() => {
+          if (!res.writableEnded) res.write(" ");
+        }, 15_000);
+        heartbeat.unref?.();
+      }
+      for (const key of memberKeys) setPollActive(key, true);
+      refreshIdleTimer();
+      let done = false;
+      let expired = false;
+      const cleanup = () => {
+        if (done) return;
+        done = true;
+        if (heartbeat) clearInterval(heartbeat);
+        if (timer) clearTimeout(timer);
+        events.off("work", onWork);
+        for (const key of memberKeys) setPollActive(key, false);
+        refreshIdleTimer();
+      };
+      const respond = async () => {
+        if (res.writableEnded || done) return;
+        const result = await takeWorkspaceWork(workspace);
+        if (result.status === "waiting" && !expired) return;
+        if (streaming) res.end(JSON.stringify(result));
+        else res.json(result);
+        cleanup();
+      };
+      const timer = streaming
+        ? null
+        : setTimeout(() => {
+            expired = true;
+            respond().catch(() => cleanup());
+          }, timeoutMs ?? 0);
+      /** @param {string} changed */
+      const onWork = (changed) => {
+        if (memberKeys.includes(changed)) respond().catch(() => cleanup());
+      };
+      events.on("work", onWork);
+      req.on("close", cleanup);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/agent/sessions/:key/findings", async (req, res, next) => {
+    try {
+      const key = String(req.params.key);
+      const session = await store.load(key);
+      const snapshot = await store.loadSnapshot(key);
+      if (!session || !snapshot) {
+        res.status(404).json({ error: "unknown session" });
+        return;
+      }
+      const body = /** @type {any} */ (req.body ?? {});
+      const title = String(body.title ?? "").trim();
+      const detail = String(body.body ?? "").trim();
+      const severity = String(body.severity ?? "medium");
+      if (!title || !detail || !["low", "medium", "high", "critical"].includes(severity)) {
+        res.status(422).json({ error: "finding needs title, body and a valid severity" });
+        return;
+      }
+      let anchor = null;
+      if (body.path != null) {
+        const file = snapshot.files.find((candidate) => candidate.path === String(body.path));
+        if (!file) {
+          res.status(422).json({ error: "finding path is not in the current snapshot" });
+          return;
+        }
+        const line = body.line == null ? undefined : Number(body.line);
+        if (line !== undefined && (!Number.isInteger(line) || line < 1)) {
+          res.status(422).json({ error: "finding line must be a positive integer" });
+          return;
+        }
+        anchor = {
+          path: file.path,
+          ...(line === undefined ? {} : { line }),
+          ...(body.side === "LEFT" || body.side === "RIGHT" ? { side: body.side } : {}),
+        };
+      }
+      const at = new Date().toISOString();
+      const finding = {
+        id: newId("f"),
+        title,
+        body: detail,
+        severity: /** @type {"low" | "medium" | "high" | "critical"} */ (severity),
+        confidence: Math.max(0, Math.min(1, Number(body.confidence ?? 0.5))),
+        anchor,
+        headSha: snapshot.headSha,
+        status: /** @type {const} */ ("open"),
+        createdAt: at,
+        updatedAt: at,
+      };
+      const updated = await store.mutate(key, { op: "finding:add", at, payload: { finding } });
+      events.emit("sse", key, "finding-added", { finding });
+      for (const workspace of await workspaceStore.list()) {
+        if (workspace.members.some((member) => member.sessionKey === key)) events.emit("workspace", workspace.id);
+      }
+      res
+        .status(201)
+        .json({ finding, counts: { openFindings: updated.findings.filter((item) => item.status === "open").length } });
     } catch (error) {
       next(error);
     }
@@ -412,6 +604,86 @@ export function registerRoutes(deps) {
 
   // ---- browser-facing ----------------------------------------------------
 
+  app.get("/workspace/:accessId", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.accessId);
+      if (!workspace) {
+        res.status(404).type("text/plain").send("No review workspace for that link.");
+        return;
+      }
+      res.setHeader("content-security-policy", CSP);
+      res.setHeader("referrer-policy", "no-referrer");
+      res.type("html").send(renderWorkspacePage({ workspace, version }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/ui/w/:aid", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.aid);
+      if (!workspace) {
+        res.status(404).json({ error: "unknown workspace" });
+        return;
+      }
+      res.json(await workspaceSummary(workspace));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/ui/w/:aid/members/:key/priority", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.aid);
+      if (!workspace) {
+        res.status(404).json({ error: "unknown workspace" });
+        return;
+      }
+      const updated = await workspaceStore.setPriority(
+        workspace.id,
+        req.params.key,
+        Number(/** @type {any} */ (req.body).priority),
+      );
+      events.emit("workspace", updated.id);
+      res.json(await workspaceSummary(updated));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/ui/w/:aid/refresh", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.aid);
+      if (!workspace) {
+        res.status(404).json({ error: "unknown workspace" });
+        return;
+      }
+      const results = await Promise.all(
+        workspace.members.map(async (member) => {
+          const session = await store.load(member.sessionKey);
+          if (!session || session.status === "ended") {
+            return { key: member.sessionKey, status: "skipped" };
+          }
+          try {
+            const outcome = await runRefresh(session, await store.loadSnapshot(member.sessionKey));
+            return { key: member.sessionKey, ref: session.pr.ref, status: "refreshed", refresh: outcome.summary };
+          } catch (error) {
+            return {
+              key: member.sessionKey,
+              ref: session.pr.ref,
+              status: "failed",
+              error: describeError(error),
+            };
+          }
+        }),
+      );
+      events.emit("workspace", workspace.id);
+      res.json({ results, summary: await workspaceSummary(workspace) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/review/:accessId", async (req, res, next) => {
     try {
       const session = await sessionByAccess(req.params.accessId);
@@ -428,9 +700,21 @@ export function registerRoutes(deps) {
       res.setHeader("content-security-policy", CSP);
       res.setHeader("referrer-policy", "no-referrer");
       const threads = await store.loadThreads(session.key);
-      res
-        .type("html")
-        .send(renderReviewPage({ session, snapshot, threads, clientScript: "/assets/prc-client.js", version }));
+      const requestedWorkspace = String(req.query.workspace ?? "");
+      const workspace = requestedWorkspace ? await workspaceStore.get(requestedWorkspace) : null;
+      const workspaceContext = workspace?.members.some((member) => member.sessionKey === session.key)
+        ? { name: workspace.name, url: `/workspace/${workspace.accessId}` }
+        : null;
+      res.type("html").send(
+        renderReviewPage({
+          session,
+          snapshot,
+          threads,
+          clientScript: "/assets/prc-client.js",
+          version,
+          workspace: workspaceContext,
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -449,6 +733,38 @@ export function registerRoutes(deps) {
         presence: computePresence(session.key),
         existing: existing ?? { threads: [], graphqlAvailable: true, graphqlError: null },
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/ui/s/:aid/findings/:id/status", async (req, res, next) => {
+    try {
+      const found = await requireSession(req, res);
+      if (!found) return;
+      const status = String(/** @type {any} */ (req.body ?? {}).status);
+      if (!["acknowledged", "dismissed", "converted"].includes(status)) {
+        res.status(422).json({ error: "invalid finding status" });
+        return;
+      }
+      const finding = found.session.findings.find((item) => item.id === req.params.id);
+      if (!finding) {
+        res.status(404).json({ error: "unknown finding" });
+        return;
+      }
+      const session = await store.mutate(found.session.key, {
+        op: "finding:status",
+        at: new Date().toISOString(),
+        payload: { id: finding.id, status },
+      });
+      events.emit("sse", session.key, "finding-updated", {
+        finding: session.findings.find((item) => item.id === finding.id),
+      });
+      for (const workspace of await workspaceStore.list()) {
+        if (workspace.members.some((member) => member.sessionKey === session.key))
+          events.emit("workspace", workspace.id);
+      }
+      res.json({ finding: session.findings.find((item) => item.id === finding.id) });
     } catch (error) {
       next(error);
     }
@@ -1353,6 +1669,46 @@ export function registerRoutes(deps) {
     }
   });
 
+  app.get("/workspace-events/:accessId", async (req, res, next) => {
+    try {
+      const workspace = await workspaceStore.get(req.params.accessId);
+      if (!workspace) {
+        res.status(404).end();
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      sseClients.add(res);
+      refreshIdleTimer();
+      res.write(`event: state-sync\ndata: ${JSON.stringify(await workspaceSummary(workspace))}\n\n`);
+      /** @param {string} changed */
+      const onWorkspace = (changed) => {
+        if (changed === workspace.id && !res.writableEnded) res.write("event: workspace-changed\ndata: {}\n\n");
+      };
+      /** @param {string} changed */
+      const onSession = (changed) => {
+        if (workspace.members.some((member) => member.sessionKey === changed) && !res.writableEnded) {
+          res.write("event: workspace-changed\ndata: {}\n\n");
+        }
+      };
+      events.on("workspace", onWorkspace);
+      events.on("sse", onSession);
+      events.on("presence", onSession);
+      req.on("close", () => {
+        sseClients.delete(res);
+        events.off("workspace", onWorkspace);
+        events.off("sse", onSession);
+        events.off("presence", onSession);
+        refreshIdleTimer();
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // ---- assets ------------------------------------------------------------
 
   app.get("/assets/:name", async (req, res, next) => {
@@ -1376,6 +1732,135 @@ export function registerRoutes(deps) {
   });
 
   // ---- helpers -----------------------------------------------------------
+
+  /** @param {import("./workspace-store.js").ReviewWorkspace} workspace */
+  async function workspaceSummary(workspace) {
+    const members = [];
+    /** @type {Map<string, string[]>} */
+    const paths = new Map();
+    for (const member of [...workspace.members].sort(
+      (a, b) => a.priority - b.priority || a.addedAt.localeCompare(b.addedAt),
+    )) {
+      const session = await store.load(member.sessionKey);
+      if (!session) continue;
+      const snapshot = await store.loadSnapshot(member.sessionKey);
+      for (const file of snapshot?.files ?? []) {
+        const sessions = paths.get(file.path) ?? [];
+        sessions.push(session.key);
+        paths.set(file.path, sessions);
+      }
+      const openQuestions = session.threads.filter((thread) => thread.status === "open").length;
+      const openFindings = session.findings.filter((finding) => finding.status === "open").length;
+      const staleFindings = session.findings.filter(
+        (finding) => finding.status === "open" && finding.headSha !== session.snapshotHeadSha,
+      ).length;
+      const risk = session.findings
+        .filter((finding) => finding.status === "open" && finding.headSha === session.snapshotHeadSha)
+        .reduce(
+          (counts, finding) => {
+            counts[finding.severity] += 1;
+            return counts;
+          },
+          { low: 0, medium: 0, high: 0, critical: 0 },
+        );
+      const draftComments = session.comments.filter((comment) => comment.state === "draft").length;
+      const staleDrafts = session.comments.filter((comment) => comment.state === "stale").length;
+      const files = snapshot?.files.length ?? 0;
+      const viewedFiles = Object.entries(session.viewed).filter(
+        ([, mark]) => !mark.atSha || mark.atSha === session.snapshotHeadSha,
+      ).length;
+      const nextAction = workspaceNextAction({
+        session,
+        staleDrafts,
+        openQuestions,
+        openFindings,
+        viewedFiles,
+        files,
+        draftComments,
+      });
+      members.push({
+        key: session.key,
+        ref: session.pr.ref,
+        title: snapshot?.pr.title ?? "",
+        canvasUrl: `/review/${session.accessId}?workspace=${encodeURIComponent(workspace.accessId)}`,
+        priority: member.priority,
+        status: session.status,
+        files,
+        viewedFiles,
+        openQuestions,
+        openFindings,
+        staleFindings,
+        risk,
+        draftComments,
+        staleDrafts,
+        alerts: session.alerts.length,
+        headMoved: false,
+        presence: computePresence(session.key),
+        nextAction,
+      });
+    }
+    const totals = members.reduce(
+      (sum, member) => ({
+        openQuestions: sum.openQuestions + member.openQuestions,
+        openFindings: sum.openFindings + member.openFindings,
+        draftComments: sum.draftComments + member.draftComments,
+      }),
+      { openQuestions: 0, openFindings: 0, draftComments: 0 },
+    );
+    return {
+      workspace: { id: workspace.id, accessId: workspace.accessId, name: workspace.name },
+      members,
+      relations: workspace.relations,
+      overlaps: [...paths.entries()]
+        .filter(([, sessions]) => new Set(sessions).size > 1)
+        .map(([path, sessions]) => ({ path, sessions: [...new Set(sessions)] })),
+      totals,
+    };
+  }
+
+  /** @param {import("./workspace-store.js").ReviewWorkspace} workspace */
+  async function takeWorkspaceWork(workspace) {
+    const ordered = [...workspace.members].sort(
+      (a, b) => a.priority - b.priority || a.addedAt.localeCompare(b.addedAt),
+    );
+    const sessions = [];
+    let remaining = 20;
+    for (const member of ordered) {
+      if (remaining <= 0) break;
+      const result = await store.takeWork(member.sessionKey);
+      // Ended and missing sessions stay visible on the dashboard but must not make every workspace
+      // poll return immediately forever. Only genuinely queued work belongs in this inbox.
+      if (result.status !== "work") continue;
+      const deliver = result.work.slice(0, Math.min(5, remaining));
+      const deferred = result.work.slice(deliver.length);
+      for (const item of deferred) {
+        await store.mutate(member.sessionKey, { op: "work:add", at: new Date().toISOString(), payload: { item } });
+      }
+      result.work = deliver;
+      remaining -= deliver.length;
+      markWorkDelivered(member.sessionKey);
+      const enriched = await enrichPoll(member.sessionKey, withArmedToken(member.sessionKey, result));
+      sessions.push({ key: member.sessionKey, ref: enriched.session?.pr?.ref ?? member.sessionKey, result: enriched });
+    }
+    return sessions.length
+      ? { status: "work", workspace: { id: workspace.id, name: workspace.name }, sessions }
+      : { status: "waiting", workspace: { id: workspace.id, name: workspace.name }, sessions: [] };
+  }
+
+  /**
+   * @param {{ session: import("./session-store.js").Session, staleDrafts: number, openQuestions: number,
+   *   openFindings: number, viewedFiles: number, files: number, draftComments: number }} input
+   */
+  function workspaceNextAction(input) {
+    if (input.session.status === "ended") return "Review ended";
+    if (input.session.alerts.length) return "Resolve session alert";
+    if (input.staleDrafts) return "Decide stale anchors";
+    if (input.openQuestions) return "Waiting for agent answers";
+    if (input.openFindings) return "Triage agent findings";
+    if (input.viewedFiles < input.files) return "Continue reviewing files";
+    if (input.draftComments) return "Choose verdict and submit";
+    return "Ready for final review";
+  }
 
   /**
    * The last head check per session, so a browser tab polling on a timer does not turn into one
@@ -1657,6 +2142,7 @@ export function publicSession(session) {
     viewed: session.viewed,
     prefs: session.prefs,
     alerts: session.alerts,
+    findings: session.findings,
     prerenderCount: PRERENDER_FILE_COUNT,
   };
 }

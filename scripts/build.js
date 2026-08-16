@@ -25,6 +25,20 @@ await esbuild.build({
     "process.env.PR_REVIEW_CANVAS_BUILD_VERSION": JSON.stringify(pkg.version),
   },
 });
+
+// The workspace dashboard is a separate, small control plane and must not make every diff canvas
+// download code it never runs.
+await esbuild.build({
+  entryPoints: [path.join(root, "src", "client", "workspace.js")],
+  outfile: path.join(root, "src", "client", "prc-workspace.js"),
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  minify: process.env.NODE_ENV === "production",
+  sourcemap: process.env.NODE_ENV !== "production",
+  legalComments: "none",
+});
 await chmod(path.join(dist, "cli.mjs"), 0o755);
 
 // Pass 2 — the browser client. Bundled rather than copied (lavish copies its client and so has
@@ -89,6 +103,7 @@ await mkdir(path.join(dist, "client"), { recursive: true });
 await copyFile(path.join(root, "src", "prc.css"), path.join(dist, "prc.css"));
 await copyFile(path.join(root, "src", "prc-hl.css"), path.join(dist, "prc-hl.css"));
 await copyFile(path.join(root, "src", "client", "prc-client.js"), path.join(dist, "client", "prc-client.js"));
+await copyFile(path.join(root, "src", "client", "prc-workspace.js"), path.join(dist, "client", "prc-workspace.js"));
 await copyFile(path.join(root, "src", "client", "prc-hl-worker.js"), path.join(dist, "client", "prc-hl-worker.js"));
 await copyFile(path.join(root, "src", "client", "prc-mermaid.js"), path.join(dist, "client", "prc-mermaid.js"));
 

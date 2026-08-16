@@ -22,6 +22,7 @@ import {
 } from "./server-control.js";
 import { newAccessId, SessionStore } from "./session-store.js";
 import { buildSnapshot } from "./snapshot.js";
+import { WorkspaceStore } from "./workspace-store.js";
 
 export const BIN = "pr-review-canvas";
 export const DESCRIPTION =
@@ -97,7 +98,21 @@ export function hasFlag(args, flag) {
 }
 
 /** Flags whose value is the next token. Needed so `--repo o/r 219` finds `219` positionally. */
-export const VALUE_FLAGS = Object.freeze(["--repo", "--port", "--token", "--thread", "--body", "--body-file"]);
+export const VALUE_FLAGS = Object.freeze([
+  "--repo",
+  "--port",
+  "--token",
+  "--thread",
+  "--body",
+  "--body-file",
+  "--workspace",
+  "--title",
+  "--severity",
+  "--confidence",
+  "--path",
+  "--side",
+  "--line",
+]);
 
 /** @param {string} token */
 function isVersionFlagToken(token) {
@@ -148,6 +163,9 @@ export function createHomeOutput() {
       [`${BIN} refresh <pr>`]:
         "Re-fetch after the author pushes and re-check every draft's anchor. Nothing is moved without the user.",
       [`${BIN} end <pr>`]: "End the review session as the agent.",
+      [`${BIN} workspace`]: "Create, update, relate, or open a named multi-PR review workspace.",
+      [`${BIN} poll --workspace <name>`]: "Long-poll one fair inbox across every PR in a workspace.",
+      [`${BIN} finding`]: "Add evidence for the reviewer to inspect; never creates review prose.",
       [`${BIN} server`]: "Run the local review server (normally spawned automatically).",
       [`${BIN} stop`]: "Shut down the background server.",
     },
@@ -513,21 +531,7 @@ async function openCommand(args) {
   const key = sessionKey(ref);
 
   await assertGhReady();
-  const store = new SessionStore();
-  const explicitPort = portFromEnv();
-  const running = await ensureServer({
-    baseUrlFor: (port) => baseUrlFor(port),
-    host: clientHost(),
-    port: explicitPort ?? resolvePort(),
-    // A named port is an instruction: obey it or fail, rather than quietly using a different one.
-    ladder: explicitPort === null,
-    preferPort: explicitPort === null ? await store.recordedPort() : null,
-    version: VERSION,
-    build: await buildId().catch(() => ""),
-    entry: serverEntry(),
-    logFile: serverLogFile(),
-    onPortChosen: (port) => store.recordPort(port),
-  });
+  const { store, running } = await ensureReviewServer();
   const base = running.baseUrl;
 
   const existing = await store.load(key);
@@ -579,6 +583,8 @@ async function openCommand(args) {
 
 /** @param {string[]} args */
 async function pollCommand(args) {
+  const workspaceName = flagValue(args, "--workspace");
+  if (workspaceName) return workspacePollCommand(workspaceName, args);
   const { ref, key, base } = await locateSession(args);
   const timeoutMs = flagValue(args, "--timeout-ms");
   const reply = flagValue(args, "--agent-reply");
@@ -597,6 +603,38 @@ async function pollCommand(args) {
   }
   const response = /** @type {any} */ (await fetchJson(`${base}/api/agent/poll?key=${key}${query}`));
   return createPollOutput(ref, response);
+}
+
+/** @param {string} workspaceName @param {string[]} args */
+async function workspacePollCommand(workspaceName, args) {
+  const { running } = await ensureReviewServer();
+  const timeoutMs = flagValue(args, "--timeout-ms");
+  const query = timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "";
+  if (!timeoutMs) process.stderr.write(`Waiting for review feedback across workspace ${workspaceName}.\n`);
+  const response = /** @type {any} */ (
+    await fetchJson(
+      `${running.baseUrl}/api/agent/workspace-poll?workspace=${encodeURIComponent(workspaceName)}${query}`,
+    )
+  );
+  if (response.status !== "work") {
+    return {
+      workspace: { name: workspaceName, status: "waiting" },
+      next_step: `No workspace feedback arrived. Re-run \`${BIN} poll --workspace ${workspaceName}\` to keep listening.`,
+    };
+  }
+  return {
+    workspace: { name: response.workspace.name, status: "feedback" },
+    sessions: response.sessions.map((/** @type {any} */ entry) => {
+      const session = entry.result.session;
+      const ref = session?.pr
+        ? { host: session.pr.host, owner: session.pr.owner, repo: session.pr.repo, number: session.pr.number }
+        : null;
+      return ref ? createPollOutput(ref, entry.result) : entry;
+    }),
+    next_step:
+      `Handle each session above using its own PR ref, then poll again with ` +
+      `\`${BIN} poll --workspace ${response.workspace.name}\`. Never move an answer or submit token between PRs.`,
+  };
 }
 
 /** @param {string[]} args */
@@ -859,6 +897,24 @@ async function activeBaseUrl(store) {
   return baseUrlFor(recorded ?? resolvePort());
 }
 
+async function ensureReviewServer() {
+  const store = new SessionStore();
+  const explicitPort = portFromEnv();
+  const running = await ensureServer({
+    baseUrlFor: (port) => baseUrlFor(port),
+    host: clientHost(),
+    port: explicitPort ?? resolvePort(),
+    ladder: explicitPort === null,
+    preferPort: explicitPort === null ? await store.recordedPort() : null,
+    version: VERSION,
+    build: await buildId().catch(() => ""),
+    entry: serverEntry(),
+    logFile: serverLogFile(),
+    onPortChosen: (port) => store.recordPort(port),
+  });
+  return { store, running };
+}
+
 /** @param {string} url @param {unknown} body */
 async function postJson(url, body) {
   return fetchJson(url, {
@@ -866,6 +922,154 @@ async function postJson(url, body) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
+}
+
+/** @param {string} url @param {unknown} body */
+async function putJson(url, body) {
+  return fetchJson(url, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+/** @param {string} url @param {unknown} body */
+async function deleteJson(url, body) {
+  return fetchJson(url, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+/** @param {string[]} args */
+async function workspaceCommand(args) {
+  const action = args[0];
+  const name = args[1];
+  if (!action || !name) {
+    throw new AxiError("workspace needs an action and name", "VALIDATION_ERROR", [
+      `Run \`${BIN} workspace create <name> [pr...]\` or \`${BIN} workspace open <name>\``,
+    ]);
+  }
+  const { running } = await ensureReviewServer();
+  const base = running.baseUrl;
+
+  if (action === "open") {
+    const workspace = await new WorkspaceStore().get(name);
+    if (!workspace) throw new AxiError(`Unknown workspace: ${name}`, "VALIDATION_ERROR", []);
+    const url = `${base}/workspace/${workspace.accessId}`;
+    if (!hasFlag(args, "--no-open") && !process.env.PR_REVIEW_CANVAS_NO_OPEN) {
+      const { default: open } = await import("open");
+      await open(url).catch(() => {});
+    }
+    return {
+      workspace: { name: workspace.name, id: workspace.id, url, members: workspace.members.length },
+      next_step: `Run \`${BIN} poll --workspace ${workspace.id}\` to listen across this review set.`,
+    };
+  }
+
+  if (action === "create") {
+    const workspace = /** @type {any} */ (await postJson(`${base}/api/agent/workspaces`, { name }));
+    const keys = await openWorkspaceMembers(args.slice(2));
+    const updated = keys.length
+      ? await postJson(`${base}/api/agent/workspaces/${encodeURIComponent(workspace.id)}/members`, {
+          sessionKeys: keys,
+        })
+      : workspace;
+    const url = `${base}/workspace/${updated.accessId}`;
+    return {
+      workspace: { name: updated.name, id: updated.id, url, members: updated.members.length },
+      next_step: `Open \`${url}\`, then run \`${BIN} poll --workspace ${updated.id}\`.`,
+    };
+  }
+
+  if (action === "add" || action === "remove") {
+    const refs = args.slice(2);
+    if (!refs.length) throw new AxiError(`workspace ${action} needs at least one PR`, "VALIDATION_ERROR", []);
+    const keys =
+      action === "add"
+        ? await openWorkspaceMembers(refs)
+        : await Promise.all(
+            refs.map(async (input) => sessionKey((await resolvePrRef({ input, cwd: process.cwd() })).ref)),
+          );
+    const updated = /** @type {any} */ (
+      action === "add"
+        ? await postJson(`${base}/api/agent/workspaces/${encodeURIComponent(name)}/members`, { sessionKeys: keys })
+        : await deleteJson(`${base}/api/agent/workspaces/${encodeURIComponent(name)}/members`, { sessionKeys: keys })
+    );
+    return { workspace: { name: updated.name, id: updated.id, members: updated.members.length }, changed: keys.length };
+  }
+
+  if (action === "relate") {
+    const fromInput = args[2];
+    const kind = args[3];
+    const toInput = args[4];
+    if (!fromInput || !kind || !toInput) {
+      throw new AxiError("workspace relate needs <from-pr> <kind> <to-pr>", "VALIDATION_ERROR", []);
+    }
+    const [from, to] = await Promise.all([
+      resolvePrRef({ input: fromInput, cwd: process.cwd() }),
+      resolvePrRef({ input: toInput, cwd: process.cwd() }),
+    ]);
+    const updated = /** @type {any} */ (
+      await putJson(`${base}/api/agent/workspaces/${encodeURIComponent(name)}/relations`, {
+        from: sessionKey(from.ref),
+        to: sessionKey(to.ref),
+        kind,
+      })
+    );
+    return {
+      workspace: { name: updated.name },
+      relation: { from: displayRef(from.ref), kind, to: displayRef(to.ref) },
+    };
+  }
+
+  throw new AxiError(`Unknown workspace action: ${action}`, "VALIDATION_ERROR", [
+    "Use create, add, remove, relate, or open",
+  ]);
+}
+
+/** @param {string[]} refs */
+async function openWorkspaceMembers(refs) {
+  if (!refs.length) return [];
+  await assertGhReady();
+  const keys = [];
+  for (const input of refs) {
+    const output = /** @type {any} */ (await openCommand([input, "--no-open", "--reopen"]));
+    if (output.session?.key) keys.push(String(output.session.key));
+  }
+  return keys;
+}
+
+/** @param {string[]} args */
+async function findingCommand(args) {
+  if (args[0] !== "add") {
+    throw new AxiError("finding currently supports only `add`", "VALIDATION_ERROR", [
+      `Run \`${BIN} finding add <pr> --title "..." --body-file -\``,
+    ]);
+  }
+  const commandArgs = args.slice(1);
+  const { ref, key, base } = await locateSession(commandArgs);
+  const title = flagValue(commandArgs, "--title")?.trim();
+  const body = await readBodyArg(commandArgs);
+  if (!title || !body.trim()) {
+    throw new AxiError("finding needs --title and --body/--body-file", "VALIDATION_ERROR", []);
+  }
+  const result = /** @type {any} */ (
+    await postJson(`${base}/api/agent/sessions/${key}/findings`, {
+      title,
+      body,
+      severity: flagValue(commandArgs, "--severity") ?? "medium",
+      confidence: flagValue(commandArgs, "--confidence") ?? "0.5",
+      path: flagValue(commandArgs, "--path"),
+      side: flagValue(commandArgs, "--side"),
+      line: flagValue(commandArgs, "--line"),
+    })
+  );
+  return {
+    finding: { id: result.finding.id, pr: displayRef(ref), title: result.finding.title, status: "open" },
+    next_step: `The finding is visible to the reviewer as analysis, not review prose. Continue with \`${BIN} poll ${displayRef(ref)}\`.`,
+  };
 }
 
 /** Where to re-exec for `server`: the real bin when running from source, else this bundle. */
@@ -950,6 +1154,10 @@ const TOP_LEVEL_HELP = [
   `  ${BIN} poll <pr>             Wait for the user's questions or their Submit`,
   `  ${BIN} answer <pr> --thread <id>  Answer one question inline`,
   `  ${BIN} refresh <pr>          Re-fetch after a push and re-check every draft's anchor`,
+  `  ${BIN} workspace create <name> [pr...]  Create a named multi-PR review set`,
+  `  ${BIN} workspace open <name>            Open its dashboard`,
+  `  ${BIN} poll --workspace <name>           Wait across every PR in the set`,
+  `  ${BIN} finding add <pr> ...              Surface agent analysis for the reviewer`,
   `  ${BIN} server                Run the local review server`,
   `  ${BIN} stop                  Shut down the background server`,
   `  ${BIN} setup hooks           Install SessionStart hooks for supported agents`,
@@ -1016,6 +1224,23 @@ const COMMAND_HELP = {
   ].join("\n"),
   stop: [`${BIN} stop [--port N]`, "", "Shuts down the background server on that port.", ""].join("\n"),
   setup: [`${BIN} setup hooks`, "", "Installs SessionStart hooks for supported agent harnesses.", ""].join("\n"),
+  workspace: [
+    `${BIN} workspace create <name> [pr...]`,
+    `${BIN} workspace add <name> <pr...>`,
+    `${BIN} workspace remove <name> <pr...>`,
+    `${BIN} workspace relate <name> <from-pr> <depends-on|supersedes|alternative-to> <to-pr>`,
+    `${BIN} workspace open <name>`,
+    "",
+    "A workspace coordinates PR sessions. Removing a member never ends or deletes its session.",
+    "",
+  ].join("\n"),
+  finding: [
+    `${BIN} finding add <pr> --title "..." (--body "..." | --body-file <path> | --body-file -)`,
+    `  [--severity low|medium|high|critical] [--confidence 0..1] [--path file --side LEFT|RIGHT --line N]`,
+    "",
+    "A finding is agent analysis for the reviewer. It can never enter a GitHub review payload.",
+    "",
+  ].join("\n"),
 };
 
 // ---------------------------------------------------------------------------
@@ -1033,6 +1258,8 @@ const COMMANDS = {
   server: serverCommand,
   stop: stopCommand,
   setup: setupCommand,
+  workspace: workspaceCommand,
+  finding: findingCommand,
 };
 
 export const COMMAND_NAMES = Object.freeze(Object.keys(COMMANDS));

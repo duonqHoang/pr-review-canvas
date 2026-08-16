@@ -130,6 +130,22 @@ const INDEX_LOCK = "@index";
  */
 
 /**
+ * Agent-authored analysis, deliberately separate from the user's review prose. A finding can point
+ * at code and help the reviewer decide where to look, but it is never eligible for submission.
+ * @typedef {object} AgentFinding
+ * @property {string} id
+ * @property {string} title
+ * @property {string} body
+ * @property {"low" | "medium" | "high" | "critical"} severity
+ * @property {number} confidence
+ * @property {{ path?: string, side?: "LEFT" | "RIGHT", line?: number } | null} anchor
+ * @property {string} headSha
+ * @property {"open" | "acknowledged" | "dismissed" | "converted"} status
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ */
+
+/**
  * @typedef {object} Session
  * @property {number} version
  * @property {number} seq
@@ -150,6 +166,7 @@ const INDEX_LOCK = "@index";
  * @property {SubmitState} submit
  * @property {SessionAlert[]} alerts
  * @property {ChatMessage[]} chat
+ * @property {AgentFinding[]} findings
  * @property {string} createdAt
  * @property {string} updatedAt
  */
@@ -196,6 +213,7 @@ export function emptySession(key, accessId) {
     submit: emptySubmitState(),
     alerts: [],
     chat: [],
+    findings: [],
     createdAt: at,
     updatedAt: at,
   };
@@ -443,6 +461,17 @@ export function applyOp(session, entry) {
     case "chat:add":
       next.chat.push(payload.message);
       break;
+    case "finding:add":
+      next.findings.push(payload.finding);
+      break;
+    case "finding:status": {
+      const finding = next.findings.find((item) => item.id === payload.id);
+      if (finding) {
+        finding.status = payload.status;
+        finding.updatedAt = entry.at;
+      }
+      break;
+    }
     case "alert:add":
       next.alerts.push(payload.alert);
       break;
@@ -637,6 +666,7 @@ export class SessionStore {
       counts: {
         draftComments: session.comments.filter((comment) => comment.state === "draft").length,
         openQuestions: session.threads.filter((thread) => thread.status === "open").length,
+        openFindings: session.findings.filter((finding) => finding.status === "open").length,
         viewedFiles: Object.keys(session.viewed).length,
       },
       updatedAt: session.updatedAt,
@@ -981,6 +1011,7 @@ export function normalizeSession(session, key) {
   // stamps by id. Assigning one on load is safe: the very next commit persists it.
   for (const alert of session.alerts) alert.id ??= newId("al");
   session.chat ??= [];
+  session.findings ??= [];
   session.viewed ??= {};
   session.prefs ??= {};
   session.localRepos ??= [];

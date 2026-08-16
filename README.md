@@ -66,6 +66,49 @@ In the browser:
 | `t`                                                | Filter files                      |
 | `?`                                                | Every shortcut                    |
 
+### Review several PRs together
+
+A named workspace is a control plane over ordinary PR sessions. Each PR keeps its own diff,
+drafts, refresh decisions and single-use submit token; the dashboard only coordinates what needs
+attention next.
+
+```sh
+pr-review-canvas workspace create release-train owner/repo#21 owner/repo#22
+pr-review-canvas workspace open release-train
+pr-review-canvas poll --workspace release-train
+
+pr-review-canvas workspace add release-train owner/repo#23
+pr-review-canvas workspace relate release-train owner/repo#23 depends-on owner/repo#21
+pr-review-canvas workspace remove release-train owner/repo#22
+```
+
+The dashboard shows review progress, open questions, drafts, agent findings, session alerts,
+declared PR relationships and files changed by more than one PR. Workspace polling orders PRs by
+priority, returns at most 20 work items with at most five from one PR, and labels every result with
+its PR reference. **Refresh all PRs** re-fetches each open member independently, so one failed fetch
+does not stop or alter the others. Removing a PR from a workspace never ends or deletes its review
+session.
+
+There is deliberately no batch submit. GitHub has no cross-PR atomic review operation, so every PR
+must still be armed and submitted separately.
+
+### Agent findings
+
+An agent may surface a risk without turning it into review prose:
+
+```sh
+pr-review-canvas finding add owner/repo#21 \
+  --title "Fallback bypasses validation" \
+  --severity high --confidence 0.9 \
+  --path src/validate.js --side RIGHT --line 84 \
+  --body-file -
+```
+
+A finding is evidence for the reviewer. It is stored separately from drafts and cannot enter a
+GitHub payload. **Write comment** navigates to a commentable anchor and opens an empty composer;
+the reviewer still writes every word. Findings retain the head SHA they were based on and are
+shown as stale after the PR changes.
+
 You can ask about any line the page shows, including context lines and lines you expanded. You can
 only _comment_ where GitHub accepts one, so the `+` appears only there. That asymmetry is why Ask and
 Comment are separate actions rather than one gesture that fails at the end.

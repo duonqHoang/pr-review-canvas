@@ -82,6 +82,11 @@ export function indexFile(env = process.env) {
 }
 
 /** @param {NodeJS.ProcessEnv} [env] */
+export function workspaceFile(env = process.env) {
+  return path.join(stateDir(env), "workspaces.json");
+}
+
+/** @param {NodeJS.ProcessEnv} [env] */
 export function serverLogFile(env = process.env) {
   return path.join(stateDir(env), "server.log");
 }

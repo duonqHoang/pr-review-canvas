@@ -75,6 +75,9 @@ comment is their decision, not yours.
 - `npx -y pr-review-canvas submit <pr> --token <t>` — Submit the review the user approved in the browser.
 - `npx -y pr-review-canvas refresh <pr>` — Re-fetch after the author pushes and re-check every draft's anchor. Nothing is moved without the user.
 - `npx -y pr-review-canvas end <pr>` — End the review session as the agent.
+- `npx -y pr-review-canvas workspace` — Create, update, relate, or open a named multi-PR review workspace.
+- `npx -y pr-review-canvas poll --workspace <name>` — Long-poll one fair inbox across every PR in a workspace.
+- `npx -y pr-review-canvas finding` — Add evidence for the reviewer to inspect; never creates review prose.
 - `npx -y pr-review-canvas server` — Run the local review server (normally spawned automatically).
 - `npx -y pr-review-canvas stop` — Shut down the background server.
 
