@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version from package.json, without the v prefix
+        description: New stable version, without the v prefix
         required: true
         type: string
 
@@ -34,15 +34,42 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Verify release version
+      - name: Verify existing release version
+        if: ${{ github.event_name == 'release' }}
+        run: node -e 'const expected = `v${require("./package.json").version}`; if (process.env.RELEASE_TAG !== expected) { throw new Error(`Release tag ${process.env.RELEASE_TAG} does not match ${expected}`); }'
+
+      - name: Prepare new release version
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+          if [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
             echo "Releases must be dispatched from the default branch: $DEFAULT_BRANCH" >&2
             exit 1
           fi
-          node -e 'const expected = `v${require("./package.json").version}`; if (process.env.RELEASE_TAG !== expected) { throw new Error(`Release tag ${process.env.RELEASE_TAG} does not match ${expected}`); }'
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Stable versions must use the X.Y.Z format." >&2
+            exit 1
+          fi
+          package_name=$(node -p 'require("./package.json").name')
+          set +e
+          npm_view_output=$(npm view "$package_name@$RELEASE_VERSION" version 2>&1)
+          npm_view_status=$?
+          set -e
+          if [[ $npm_view_status -eq 0 ]]; then
+            echo "$package_name@$RELEASE_VERSION is already published to npm." >&2
+            exit 1
+          fi
+          if [[ "$npm_view_output" != *"E404"* ]]; then
+            echo "$npm_view_output" >&2
+            exit $npm_view_status
+          fi
+          current_version=$(node -p 'require("./package.json").version')
+          node -e 'const current = process.argv[1].split(".").map(Number); const next = process.argv[2].split(".").map(Number); const order = next.findIndex((part, index) => part !== current[index]); if (order >= 0 && next[order] < current[order]) { throw new Error(`${process.argv[2]} must not be older than ${process.argv[1]}`); }' "$current_version" "$RELEASE_VERSION"
+          if [[ "$current_version" != "$RELEASE_VERSION" ]]; then
+            npm version "$RELEASE_VERSION" --no-git-tag-version
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -50,21 +77,35 @@ jobs:
       - name: Check package
         run: npm run check
 
+      - name: Commit release version
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "release: $RELEASE_TAG"
+            git push origin "HEAD:$DEFAULT_BRANCH"
+          fi
+          echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Create tag and GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if tagged_commit=$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null); then
-            if [[ "$tagged_commit" != "$GITHUB_SHA" ]]; then
-              echo "$RELEASE_TAG already points to $tagged_commit instead of $GITHUB_SHA" >&2
+            if [[ "$tagged_commit" != "$RELEASE_COMMIT" ]]; then
+              echo "$RELEASE_TAG already points to $tagged_commit instead of $RELEASE_COMMIT" >&2
               exit 1
             fi
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "$RELEASE_TAG already exists at this commit; reusing it."
           else
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --generate-notes
+            gh release create "$RELEASE_TAG" --target "$RELEASE_COMMIT" --generate-notes
           fi
 
       - name: Publish package
