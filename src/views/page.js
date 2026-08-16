@@ -58,6 +58,8 @@ function timeHtml(value, prefix) {
 export function renderReviewPage({ session, snapshot, clientScript, version, threads, workspace = null }) {
   const pr = snapshot.pr;
   const prCommits = Array.isArray(pr.commits) ? pr.commits : [];
+  const stateLabel = pr.isDraft ? "DRAFT" : String(pr.state || "UNKNOWN").toUpperCase();
+  const stateTone = ["OPEN", "MERGED", "CLOSED"].includes(stateLabel) ? stateLabel.toLowerCase() : "draft";
   const title = `${pr.title} · ${session.pr.ref}`;
   const existingThreads = threads?.threads ?? [];
   const resolvedStateKnown = threads?.graphqlAvailable !== false;
@@ -190,7 +192,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
     <h1 class="prc-pr-title">${escapeHtml(pr.title)}</h1>
     <span class="prc-pr-byline">by <strong>${escapeHtml(pr.authorLogin || "Unknown author")}</strong>${pr.createdAt ? ` &middot; ${timeHtml(pr.createdAt, "opened")}` : ""}${pr.mergedAt ? ` &middot; ${timeHtml(pr.mergedAt, "merged")}` : ""}</span>
   </div>
-  <span class="prc-state">${escapeHtml(pr.state)}</span>
+  <span class="prc-state" data-state="${stateTone}">${escapeHtml(stateLabel)}</span>
   <span class="prc-refs"><code>${escapeHtml(pr.baseRefName)}</code> &larr; <code>${escapeHtml(pr.headRefName)}</code></span>
   <span class="prc-spacer"></span>
   <div class="prc-presence" id="prcPresence" data-state="waiting" role="status" aria-live="polite">

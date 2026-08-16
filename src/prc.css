@@ -21,6 +21,12 @@
   --prc-accent-fg: #ffffff;
   --prc-danger: #cf222e;
   --prc-success: #1a7f37;
+  /* PR lifecycle badges use solid semantic fills. They stay dark enough for white text in both
+     themes; the brighter dark-mode success/danger tokens are intended as text, not backgrounds. */
+  --prc-state-open: #1a7f37;
+  --prc-state-merged: #6f42c1;
+  --prc-state-closed: #cf222e;
+  --prc-state-draft: #57606a;
   /* Warning, not error: a drifted anchor is something to decide about, not something that broke.
      Both values clear 4.5:1 on the elevated background they are used on — tokens.test.js pins it. */
   --prc-attention: #9a6700;
@@ -491,8 +497,20 @@ body.prc {
   font-size: var(--prc-text-sm);
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--prc-success);
+  background: var(--prc-state-draft);
   color: #fff;
+}
+
+.prc-state[data-state="open"] {
+  background: var(--prc-state-open);
+}
+
+.prc-state[data-state="merged"] {
+  background: var(--prc-state-merged);
+}
+
+.prc-state[data-state="closed"] {
+  background: var(--prc-state-closed);
 }
 
 .prc-refs code {
