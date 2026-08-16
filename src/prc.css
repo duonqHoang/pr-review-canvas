@@ -1887,6 +1887,10 @@ body.prc-dragging {
   color: var(--prc-fg-muted);
 }
 
+.prc-copy-selection-link {
+  flex: 0 0 auto;
+}
+
 .prc-draft-body {
   white-space: pre-wrap;
   margin-top: var(--prc-space-1);

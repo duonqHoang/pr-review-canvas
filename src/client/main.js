@@ -7,6 +7,7 @@ import { renderMarkdown } from "../shared/markdown.js";
 import { editMarkdown } from "../shared/markdown-editor.js";
 import { clampRange, describeRange } from "../shared/selection.js";
 import { languageForPath } from "../worker/languages.js";
+import { unseenLineIndexes } from "./expanded-rows.js";
 
 /**
  * The review client.
@@ -468,6 +469,15 @@ function onDocumentClick(event) {
     return;
   }
 
+  const copySelectionLink = target.closest("[data-act='copy-selection-link']");
+  if (copySelectionLink) {
+    const anchor = state.anchor;
+    if (!anchor) return;
+    const link = reviewPermalinkForAnchor(anchor);
+    if (link) copyText(link, anchor.startLine == null ? "Link to line copied" : "Link to line range copied");
+    return;
+  }
+
   const layoutButton = target.closest("[data-act='layout']");
   if (layoutButton) {
     setLayout(layoutButton.getAttribute("data-layout") === "split" ? "split" : "unified");
@@ -925,6 +935,8 @@ function openComposer(mode = "comment", options = {}) {
     // The note already names the side and says whether anything was dropped, so it replaces the bare
     // line number rather than sitting next to it.
     `${escapeHtml(options.note || `line ${range}${anchor.side === "LEFT" ? " (original)" : ""}`)}</span>` +
+    `<button type="button" class="prc-btn prc-btn-quiet prc-copy-selection-link"` +
+    ` data-act="copy-selection-link" title="Copy a permalink to this ${anchor.startLine == null ? "line" : "line range"}">Copy link</button>` +
     `</div>` +
     `<div class="prc-editor" data-role="editor">` +
     `<div class="prc-editor-bar">` +
@@ -2401,6 +2413,30 @@ function hasUnsavedText() {
 const expansionKey = (fileIndex, hunkIndex) => `${fileIndex}:${hunkIndex}`;
 
 /**
+ * Insert fetched context, dropping rows that an expansion from the other end of the gap already
+ * revealed. Both controls have independent cursors, so overlap is expected when their chunks meet.
+ *
+ * @param {Element} controlRow
+ * @param {"before" | "after"} direction
+ * @param {string} rows
+ */
+function insertExpandedRows(controlRow, direction, rows) {
+  const table = controlRow.closest("table.prc-diff");
+  if (!table) return;
+  const template = document.createElement("template");
+  template.innerHTML = rows;
+  const incoming = [...template.content.querySelectorAll("tr.prc-line")];
+  /** @param {Element} row */
+  const keyOf = (row) => row.querySelector("td.prc-code[data-lk]")?.getAttribute("data-lk") ?? "";
+  const existing = [...table.querySelectorAll("tr.prc-line")].map(keyOf);
+  const keep = new Set(unseenLineIndexes(existing, incoming.map(keyOf)));
+  incoming.forEach((row, index) => {
+    if (!keep.has(index)) row.remove();
+  });
+  controlRow.parentNode?.insertBefore(template.content, direction === "before" ? controlRow.nextSibling : controlRow);
+}
+
+/**
  * Reveal more of the file around a hunk.
  *
  * @param {Element} button
@@ -2441,8 +2477,7 @@ async function expandContext(button) {
       // Both directions insert next to the button that was clicked: below it going up, above it going
       // down. That is only possible because the downward control has its own row at the end of the
       // hunk — with both arrows in the header, expanding down put rows hundreds of lines away.
-      if (direction === "before") controlRow.insertAdjacentHTML("afterend", result.rows);
-      else controlRow.insertAdjacentHTML("beforebegin", result.rows);
+      insertExpandedRows(controlRow, direction, result.rows);
       record[direction] = direction === "before" ? result.firstNew : result.lastNew;
       state.expansions.set(expansionKey(fileIndex, hunkIndex), record);
       // New rows joined the hunk's block, so the whole file is coloured again from scratch. Cheaper
@@ -2512,6 +2547,26 @@ function repoRef() {
 }
 
 /**
+ * The pull request Files URL for one selected line or range.
+ *
+ * @param {{ fileIndex: number, side: string, line: number, startLine?: number }} anchor
+ * @returns {string | null}
+ */
+function reviewPermalinkForAnchor(anchor) {
+  const file = state.files.find((/** @type {any} */ candidate) => candidate.index === anchor.fileIndex);
+  if (!file || (anchor.side !== "LEFT" && anchor.side !== "RIGHT")) return null;
+  return filesViewPermalink({
+    ref: repoRef(),
+    number: Number(state.pr.number),
+    sha: state.pr.headSha,
+    anchorId: file.anchorId,
+    side: anchor.side,
+    line: anchor.line,
+    startLine: anchor.startLine,
+  });
+}
+
+/**
  * Two links per location, because they answer different questions: the blob link is durable and
  * shows the file, the files-view link shows the review context around it. Copying both, one per
  * line, means the user pastes whichever one they meant.
@@ -2539,15 +2594,8 @@ function permalinksFor(lk) {
     line,
     startLine,
   });
-  const review = filesViewPermalink({
-    ref: repoRef(),
-    number: Number(state.pr.number),
-    sha: state.pr.headSha,
-    anchorId: file.anchorId,
-    side,
-    line,
-    startLine,
-  });
+  const review = reviewPermalinkForAnchor({ fileIndex: parsed.fileIndex, side, line, startLine });
+  if (!review) return null;
   return `${blob}\n${review}`;
 }
 
