@@ -31,6 +31,16 @@ test("workspace names produce stable ids and random browser access ids", async (
   });
 });
 
+test("prototype-shaped workspace ids stay ordinary stored data", async () => {
+  // Without own-property checks, inherited keys such as `constructor` are mistaken for workspaces.
+  await withStore(async (store) => {
+    const workspace = await store.create("constructor");
+    assert.equal(workspace.id, "constructor");
+    assert.equal((await store.get("constructor"))?.id, "constructor");
+    assert.equal(Object.getPrototypeOf((await store.read()).workspaces), Object.prototype);
+  });
+});
+
 test("membership, priority and cross-PR relationships survive a fresh store", async () => {
   await withStore(async (store) => {
     await store.create("stack");

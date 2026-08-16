@@ -123,15 +123,16 @@ export function textOf(html) {
 
 /** @param {string} value */
 export function decodeEntities(value) {
-  return (
-    value
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#x27;/g, "'")
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      // Last, or an escaped `&amp;lt;` would decode twice.
-      .replace(/&amp;/g, "&")
-  );
+  /** @type {Record<string, string>} */
+  const entities = {
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#x27;": "'",
+    "&#39;": "'",
+    "&nbsp;": " ",
+    "&amp;": "&",
+  };
+  // One pass is load-bearing: an escaped `&amp;lt;` must become `&lt;`, not decode twice to `<`.
+  return value.replace(/&(?:lt|gt|quot|#x27|#39|nbsp|amp);/g, (entity) => entities[entity]);
 }
