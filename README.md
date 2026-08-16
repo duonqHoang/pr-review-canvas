@@ -1,5 +1,8 @@
 # pr-review-canvas
 
+> pr-review-canvas is an independent open-source project and is not affiliated with or endorsed by GitHub, Inc.
+> GitHub is a trademark of GitHub, Inc.
+
 Review a GitHub pull request in a local, GitHub-styled diff canvas — highlight lines to ask your
 agent about them inline, draft the review comments yourself, and post the whole review to GitHub in
 one atomic call when you click Submit.
