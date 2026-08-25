@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AxiError, installSessionStartHooks, RESERVED_COMMANDS, runAxiCli } from "./axi.js";
+import { detectAgentRuntime } from "./agent-runtime.js";
 import { assertGhReady } from "./gh.js";
 import { buildReviewPayload, manualCommandFor, postReplies, postReview } from "./gh-submit.js";
 import { fetchExistingThreads, summarizeThreads } from "./gh-threads.js";
@@ -593,7 +594,9 @@ async function pollCommand(args) {
     await postJson(`${base}/api/agent/sessions/${key}/agent-reply`, { text: reply }).catch(() => {});
   }
 
-  const query = timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "";
+  const agent = flagValue(args, "--agent") ?? detectAgentRuntime();
+  const query =
+    `&agent=${encodeURIComponent(agent)}` + (timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "");
   // The no-timeout poll writes an immediate stderr banner so it is visibly not hung. stdout stays
   // reserved for the final TOON response.
   if (!timeoutMs) {
@@ -609,7 +612,9 @@ async function pollCommand(args) {
 async function workspacePollCommand(workspaceName, args) {
   const { running } = await ensureReviewServer();
   const timeoutMs = flagValue(args, "--timeout-ms");
-  const query = timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "";
+  const agent = flagValue(args, "--agent") ?? detectAgentRuntime();
+  const query =
+    `&agent=${encodeURIComponent(agent)}` + (timeoutMs ? `&timeoutMs=${encodeURIComponent(timeoutMs)}` : "");
   if (!timeoutMs) process.stderr.write(`Waiting for review feedback across workspace ${workspaceName}.\n`);
   const response = /** @type {any} */ (
     await fetchJson(

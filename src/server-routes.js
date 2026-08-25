@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { anchorForQuestion, normalizeSelection } from "./anchor/anchor.js";
+import { normalizeAgentRuntime } from "./agent-runtime.js";
 import { buildSuggestion, setSuggestionRange, stripCr } from "./anchor/suggestion.js";
 import { describeFailures, validateBatch } from "./anchor/validate.js";
 import { expandedLines, expandRange, loadFileLines } from "./expand.js";
@@ -131,6 +132,9 @@ export function registerRoutes(deps) {
    */
   const armedTokens = new Map();
 
+  /** UX metadata only: changing this value never changes what an agent route may do. */
+  const agentRuntimes = new Map();
+
   /** @param {import("./session-store.js").Session} session */
   const indexAccess = (session) => {
     accessIndex.set(session.accessId, session.key);
@@ -256,6 +260,7 @@ export function registerRoutes(deps) {
   app.get("/api/agent/poll", async (req, res, next) => {
     try {
       const key = String(req.query.key ?? "");
+      agentRuntimes.set(key, normalizeAgentRuntime(req.query.agent));
       const timeoutMs =
         req.query.timeoutMs === undefined ? null : Math.max(0, Math.min(Number(req.query.timeoutMs || 0), 2147483647));
 
@@ -1674,7 +1679,7 @@ export function registerRoutes(deps) {
 
       // Handshake, so a browser that reconnects converges without a reload.
       send("state-sync", publicSession(session));
-      send("agent-presence", { state: computePresence(key) });
+      send("agent-presence", { state: computePresence(key), agent: agentRuntimes.get(key) ?? "generic" });
 
       /** @param {string} changed @param {string} event @param {unknown} data */
       const onSse = (changed, event, data) => {
@@ -1682,7 +1687,9 @@ export function registerRoutes(deps) {
       };
       /** @param {string} changed @param {string} presence */
       const onPresence = (changed, presence) => {
-        if (changed === key) send("agent-presence", { state: presence });
+        if (changed === key) {
+          send("agent-presence", { state: presence, agent: agentRuntimes.get(key) ?? "generic" });
+        }
       };
       events.on("sse", onSse);
       events.on("presence", onPresence);

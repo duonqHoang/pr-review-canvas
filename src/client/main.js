@@ -38,6 +38,7 @@ const state = {
   /** @type {"unified" | "split"} */
   layout: bootstrap.layout === "split" ? "split" : "unified",
   presence: "waiting",
+  agentRuntime: "generic",
   status: String(bootstrap.status ?? "open"),
   /** Who stopped the review, once one of them has: `"user"` or `"agent"`. */
   endedBy: String(bootstrap.endedBy ?? ""),
@@ -3179,7 +3180,8 @@ async function onViewedChange(event) {
 function connectEvents() {
   const events = new EventSource(`/events/${encodeURIComponent(state.accessId)}`);
   events.addEventListener("agent-presence", (event) => {
-    setPresence(JSON.parse(/** @type {MessageEvent} */ (event).data).state);
+    const data = JSON.parse(/** @type {MessageEvent} */ (event).data);
+    setPresence(data.state, data.agent);
   });
   events.addEventListener("submit-cancelled", () => {
     if (armTimer) clearTimeout(armTimer);
@@ -3814,16 +3816,44 @@ function applyEnded(endedBy) {
   renderReviewBar();
 }
 
-/** @param {string} next */
-function setPresence(next) {
+/** @type {Record<string, string>} */
+const AGENT_LABELS = { codex: "Codex", claude: "Claude Code", opencode: "OpenCode", generic: "Agent" };
+const PERMISSION_WAIT_MS = 30_000;
+const NORMAL_DOCUMENT_TITLE = document.title;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let permissionWaitTimer = null;
+
+/** @param {string} next @param {string} [agent] */
+function setPresence(next, agent) {
   state.presence = next === "listening" || next === "working" ? next : "waiting";
+  if (agent && Object.hasOwn(AGENT_LABELS, agent)) state.agentRuntime = agent;
+  if (permissionWaitTimer) clearTimeout(permissionWaitTimer);
+  permissionWaitTimer = null;
+  if (document.title.startsWith("Permission may be needed · ")) document.title = NORMAL_DOCUMENT_TITLE;
   const host = el("prcPresence");
   const label = el("prcPresenceLabel");
   const banner = el("prcPresenceBanner");
   if (host) host.dataset.state = state.presence;
   if (label) {
-    label.textContent =
-      state.presence === "listening" ? "Agent listening" : state.presence === "working" ? "Agent working…" : "No agent";
+    const name = AGENT_LABELS[state.agentRuntime] ?? "Agent";
+    if (state.presence === "listening") label.textContent = `${name} listening`;
+    else if (state.presence === "working") label.textContent = `${name} working…`;
+    else label.textContent = "No agent";
+  }
+  if (state.presence === "working") {
+    permissionWaitTimer = setTimeout(() => {
+      const name = AGENT_LABELS[state.agentRuntime] ?? "Agent";
+      if (label) label.textContent = `${name} may need permission`;
+      showBanner(`Still waiting for ${name}. It may be waiting for permission in its own app or terminal.`);
+      if (document.hidden && !document.title.startsWith("Permission may be needed · ")) {
+        document.title = `Permission may be needed · ${document.title}`;
+      }
+      if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        new Notification(`${name} may need permission`, {
+          body: "Return to the agent app or terminal to inspect the pending action.",
+        });
+      }
+    }, PERMISSION_WAIT_MS);
   }
   if (banner) banner.hidden = state.presence !== "waiting";
   // The composer hint and any pending-question note both say something different depending on

@@ -46,6 +46,23 @@ Run `setup hooks` against the **installed** binary, not a clone. It only writes 
 tell it is running as the installed CLI, so `node bin/pr-review-canvas.js setup hooks` from a source
 checkout does nothing — and still reports success.
 
+### Agent permissions
+
+The review protocol is agent-independent. Polls identify common Codex, Claude Code and OpenCode
+harnesses only so the canvas can name where a delayed action may be waiting; an unknown harness is
+shown simply as “Agent”. Set `PR_REVIEW_CANVAS_AGENT=codex|claude|opencode|generic` when a wrapper hides
+the harness environment.
+
+For the smoothest question-and-answer loop, persistently allow only this CLI's `poll`, `answer`,
+`refresh` and `end` command prefixes in your agent host. Do not grant blanket shell access. Keep
+`submit` separately gated: it is the only command that writes to GitHub and it still requires the
+single-use token created by clicking Submit in the canvas.
+
+After an agent has been working for 30 seconds, the canvas says that it may be waiting for permission.
+If browser notifications were already enabled, a background canvas tab also sends a notification.
+This is deliberately a heuristic: Codex, Claude Code and other hosts do not expose a shared trusted
+approval API to the local canvas.
+
 ## Use it
 
 ```sh
