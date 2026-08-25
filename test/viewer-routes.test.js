@@ -139,6 +139,31 @@ const post = (suffix, payload) => ({ method: "POST", body: JSON.stringify(payloa
 // Expand
 // ---------------------------------------------------------------------------
 
+test("ending a review revokes its page link, and reopening does not revive the old capability", async () => {
+  await withSession(async ({ base, accessId, key, store }) => {
+    assert.equal((await fetch(`${base}/review/${accessId}`)).status, 200);
+
+    await store.mutate(key, { op: "session:end", at: "t-end", payload: { endedBy: "agent" } });
+    const ended = await fetch(`${base}/review/${accessId}`);
+    assert.equal(ended.status, 410);
+    assert.match(await ended.text(), /review has ended/i);
+
+    const replacementAccessId = newAccessId();
+    await store.upsert({
+      ref: /** @type {any} */ (REF),
+      key,
+      accessId: replacementAccessId,
+      url: `http://127.0.0.1/review/${replacementAccessId}`,
+      displayRef: "o/r#1",
+      headSha: HEAD,
+      reopen: true,
+    });
+
+    assert.equal((await fetch(`${base}/review/${accessId}`)).status, 404);
+    assert.equal((await fetch(`${base}/review/${replacementAccessId}`)).status, 200);
+  });
+});
+
 test("expanding below a hunk returns the hidden lines with both numbers", async () => {
   await withSession(async ({ ui }) => {
     const response = await ui("/expand", post("/expand", { fileIndex: 0, hunkIndex: 0, direction: "after" }));
