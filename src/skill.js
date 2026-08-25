@@ -100,6 +100,10 @@ export const AGENT_RULES = [
     "conversation about a change, not an invitation to make one.",
   "**Leave the poll running.** It is silent by design and stays open for as long as the user is " +
     "reading. A poll that returns nothing is working correctly.",
+  "**Keep the review loop pre-approved narrowly when your host supports persistent command rules.** " +
+    "Allow this CLI's `poll`, `answer`, `refresh` and `end` commands; do not ask for blanket shell access. " +
+    "Keep `submit` separately gated: it is the only command that writes to GitHub and already requires the " +
+    "single-use token minted by the user's click.",
 ];
 
 /**
