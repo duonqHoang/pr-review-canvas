@@ -140,7 +140,13 @@ export function registerRoutes(deps) {
   /** @param {string} accessId */
   async function sessionByAccess(accessId) {
     const known = accessIndex.get(accessId);
-    if (known) return store.load(known);
+    if (known) {
+      const session = await store.load(known);
+      // Reopening rotates the browser capability. A stale in-memory entry must not let the old
+      // accessId follow the session to its new link until the server happens to restart.
+      if (session?.accessId === accessId) return session;
+      accessIndex.delete(accessId);
+    }
     // After a server restart the in-memory map is empty; fall back to the on-disk index.
     for (const entry of await store.listSessions()) {
       const record = /** @type {{ accessId?: string, key?: string }} */ (entry);
@@ -717,6 +723,10 @@ export function registerRoutes(deps) {
       const session = await sessionByAccess(req.params.accessId);
       if (!session) {
         res.status(404).type("text/plain").send("No review session for that link. Re-run pr-review-canvas.");
+        return;
+      }
+      if (session.status === "ended") {
+        res.status(410).type("text/plain").send("This review has ended. Reopen it with pr-review-canvas --reopen.");
         return;
       }
       const snapshot = await store.loadSnapshot(session.key);
