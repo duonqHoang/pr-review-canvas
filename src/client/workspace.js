@@ -109,10 +109,6 @@ function memberCard(member) {
   meta.append(metaBadge(member.status, "status"));
   if (member.headMoved) meta.append(metaBadge("New head", "attention"));
   if (member.alerts) meta.append(metaBadge(`${member.alerts} alerts`, "danger"));
-  if (member.risk?.critical || member.risk?.high) {
-    meta.append(metaBadge(`${member.risk.critical ?? 0} critical / ${member.risk.high ?? 0} high risk`, "danger"));
-  }
-  if (member.staleFindings) meta.append(metaBadge(`${member.staleFindings} stale findings`, "attention"));
 
   const progress = document.createElement("progress");
   progress.max = Math.max(1, member.files ?? 0);
@@ -136,9 +132,7 @@ function memberCard(member) {
   const continueLink = document.createElement("a");
   continueLink.className = "prc-btn prc-btn-primary prc-workspace-continue";
   continueLink.href = member.canvasUrl;
-  continueLink.append(
-    text(member.alerts || member.openQuestions || member.openFindings ? "Resolve next action" : "Continue review"),
-  );
+  continueLink.append(text(member.alerts || member.openQuestions ? "Resolve next action" : "Continue review"));
   card.append(head, next, meta, progress, counts, continueLink);
   return card;
 }

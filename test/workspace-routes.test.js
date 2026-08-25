@@ -172,3 +172,49 @@ test("findings stay separate from drafts and their UI mutation requires same-ori
     assert.equal((await store.load(KEY_A))?.comments.length, 0);
   });
 });
+
+test("finding scans are opt-in and skip unchanged evidence after the agent completes them", async () => {
+  await withWorkspace(async ({ base, store }) => {
+    const before = await fetch(`${base}/api/agent/poll?key=${KEY_A}&timeoutMs=0`);
+    assert.equal((await before.json()).status, "waiting", "opening a canvas must never trigger analysis");
+
+    const requested = await fetch(`${base}/api/ui/s/access-1/findings/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base },
+      body: "{}",
+    });
+    assert.equal(requested.status, 202);
+    const requestBody = await requested.json();
+    assert.equal(requestBody.remaining, 1);
+    assert.equal(requestBody.scan.status, "queued");
+    assert.equal(requestBody.scan.findingCountAtStart, 0);
+
+    const poll = await fetch(`${base}/api/agent/poll?key=${KEY_A}&timeoutMs=0`);
+    const work = await poll.json();
+    assert.equal(work.findingScan.id, requestBody.scan.id);
+    assert.equal((await store.load(KEY_A))?.findingScan?.status, "reviewing");
+    assert.deepEqual(
+      work.findingScan.scopes.map((/** @type {any} */ scope) => scope.path),
+      ["src/shared.js"],
+    );
+
+    const complete = await fetch(`${base}/api/agent/sessions/${KEY_A}/findings/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scanId: requestBody.scan.id }),
+    });
+    assert.equal(complete.status, 200);
+    assert.equal(Object.keys((await store.load(KEY_A))?.findingReviewed ?? {}).length, 1);
+    const completedPage = await fetch(`${base}/review/access-1`);
+    assert.equal(completedPage.status, 200);
+    assert.match(await completedPage.text(), /Reviewed 1 file · No findings/);
+
+    const repeated = await fetch(`${base}/api/ui/s/access-1/findings/request`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: base },
+      body: "{}",
+    });
+    assert.equal(repeated.status, 200);
+    assert.equal((await repeated.json()).remaining, 0, "unchanged patches must not be reviewed twice");
+  });
+});
