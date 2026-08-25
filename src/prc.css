@@ -63,9 +63,11 @@
      so its height is not knowable from CSS. Sticking the file headers at a guessed offset is what hid
      the first rows of every table — the hunk header and the expand band — behind it. */
   --prc-chrome-h: 52px;
-  /* Where the toolbar sticks: the measured height of the header above it. Same arrangement as
+  /* Where the agent action bar sticks: the measured height of the header above it. */
+  --prc-viewbar-top: 52px;
+  /* Where the diff toolbar sticks: the measured height of the header and agent action bar above it. Same arrangement as
      --prc-chrome-h — the literal is a pre-measurement fallback, not a claim about the real height. */
-  --prc-toolbar-top: 52px;
+  --prc-toolbar-top: 96px;
   /* The fixed review bar's height, measured by the client for the same reason as the two above: it
      wraps on a narrow window. Anything sticky has to stop short of it, or it covers the bottom of that
      column — which is where the chat's Send button lives. */
@@ -227,12 +229,29 @@ body.prc {
   font-weight: 600;
 }
 
-.prc-view-tabs {
+.prc-viewbar {
+  position: sticky;
+  top: var(--prc-viewbar-top);
+  z-index: 9;
   display: flex;
-  gap: var(--prc-space-1);
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--prc-space-4);
   padding: 0 var(--prc-space-4);
   border-bottom: 1px solid var(--prc-border);
   background: var(--prc-bg);
+}
+
+.prc-view-tabs {
+  display: flex;
+  gap: var(--prc-space-1);
+}
+
+.prc-agent-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--prc-space-2);
+  padding-block: 5px;
 }
 
 .prc-view-tab {
@@ -383,13 +402,13 @@ body.prc {
   text-decoration: underline;
 }
 
-/* The toolbar sticks below the header, so the layout toggle, the file filter and the chat button stay
-   reachable however far down the diff you are. Its offset is measured rather than assumed: the header
+/* The toolbar sticks below the header, so the layout toggle and file filter stay reachable however
+   far down the diff you are. Its offset is measured rather than assumed: the header
    holds the pull request title, which wraps on a narrow window, so its height is not knowable here. */
 .prc-toolbar {
   position: sticky;
   top: var(--prc-toolbar-top);
-  z-index: 9;
+  z-index: 8;
 }
 
 .prc-toolbar-context,
@@ -2437,6 +2456,70 @@ kbd {
 
 /* ---- agent findings ---- */
 
+.prc-findings-request {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--prc-space-1);
+  min-height: 34px;
+  padding-inline: var(--prc-space-3) var(--prc-space-2);
+  border-color: color-mix(in srgb, var(--prc-accent) 58%, var(--prc-border));
+  background: color-mix(in srgb, var(--prc-accent) 11%, var(--prc-bg-elevated));
+  color: var(--prc-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(31 35 40 / 10%);
+}
+.prc-findings-request:hover:not(:disabled) {
+  border-color: var(--prc-accent);
+  background: color-mix(in srgb, var(--prc-accent) 18%, var(--prc-bg-elevated));
+}
+.prc-findings-request[aria-busy="true"] {
+  cursor: progress;
+}
+.prc-findings-request[data-review-state="queued"]:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+.prc-findings-request[data-review-state="complete"]:disabled {
+  border-color: color-mix(in srgb, var(--prc-success) 48%, var(--prc-border));
+  background: color-mix(in srgb, var(--prc-success) 10%, var(--prc-bg-elevated));
+  color: var(--prc-success);
+  cursor: default;
+  opacity: 1;
+}
+.prc-agent-review-complete-icon {
+  display: none;
+}
+.prc-findings-request[data-review-state="complete"] .prc-agent-review-ready-icon {
+  display: none;
+}
+.prc-findings-request[data-review-state="complete"] .prc-agent-review-complete-icon {
+  display: block;
+}
+.prc-counter {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--prc-accent);
+  color: var(--prc-accent-fg);
+  font: 600 11px/18px var(--prc-mono);
+  text-align: center;
+}
+.prc-chip-agent-reviewed {
+  color: var(--prc-success);
+  border-color: currentColor;
+}
+.prc-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .prc-findings {
   border-bottom: 1px solid var(--prc-border-muted);
   padding: var(--prc-space-2);
@@ -2835,11 +2918,30 @@ kbd {
   .prc-pr-byline {
     white-space: normal;
   }
-  .prc-view-tabs {
+  .prc-viewbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
     padding-inline: var(--prc-space-2);
   }
   .prc-view-tab {
     flex: 1;
+  }
+  .prc-agent-actions {
+    grid-row: 1;
+    justify-content: stretch;
+    gap: var(--prc-space-2);
+    padding-block: var(--prc-space-2) var(--prc-space-1);
+  }
+  .prc-agent-actions .prc-btn {
+    min-height: 44px;
+  }
+  .prc-agent-actions .prc-findings-request {
+    flex: 1;
+    justify-content: center;
+  }
+  .prc-view-tabs {
+    grid-row: 2;
   }
   .prc-overview {
     width: calc(100% - 16px);

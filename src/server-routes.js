@@ -6,6 +6,7 @@ import { normalizeAgentRuntime } from "./agent-runtime.js";
 import { buildSuggestion, setSuggestionRange, stripCr } from "./anchor/suggestion.js";
 import { describeFailures, validateBatch } from "./anchor/validate.js";
 import { expandedLines, expandRange, loadFileLines } from "./expand.js";
+import { findingScopeFingerprint, unreviewedFindingScopes } from "./finding-scan.js";
 import { fetchPullRequest } from "./gh-fetch.js";
 import { fetchExistingThreads } from "./gh-threads.js";
 import { isSameOriginRequest } from "./host-guard.js";
@@ -144,7 +145,13 @@ export function registerRoutes(deps) {
   /** @param {string} accessId */
   async function sessionByAccess(accessId) {
     const known = accessIndex.get(accessId);
-    if (known) return store.load(known);
+    if (known) {
+      const session = await store.load(known);
+      // Reopening rotates the browser capability. A stale in-memory entry must not let the old
+      // accessId follow the session to its new link until the server happens to restart.
+      if (session?.accessId === accessId) return session;
+      accessIndex.delete(accessId);
+    }
     // After a server restart the in-memory map is empty; fall back to the on-disk index.
     for (const entry of await store.listSessions()) {
       const record = /** @type {{ accessId?: string, key?: string }} */ (entry);
@@ -452,6 +459,43 @@ export function registerRoutes(deps) {
     }
   });
 
+  app.post("/api/agent/sessions/:key/findings/complete", async (req, res, next) => {
+    try {
+      const key = String(req.params.key);
+      const session = await store.load(key);
+      const id = String(/** @type {any} */ (req.body ?? {}).scanId ?? "");
+      if (!session) {
+        res.status(404).json({ error: "unknown session" });
+        return;
+      }
+      if (!id || session.findingScan?.id !== id || session.findingScan.status !== "reviewing") {
+        res.status(409).json({ error: "finding scan is no longer active" });
+        return;
+      }
+      const snapshot = await store.loadSnapshot(key);
+      const assigned = new Set(session.findingScan.fingerprints);
+      const reviewedPaths = (snapshot?.files ?? [])
+        .filter((file) => assigned.has(findingScopeFingerprint(file)))
+        .map((file) => file.path);
+      const updated = await store.mutate(key, {
+        op: "finding:scan-complete",
+        at: new Date().toISOString(),
+        payload: { id },
+      });
+      const findingReviewRemaining = snapshot
+        ? unreviewedFindingScopes(snapshot, updated.findingReviewed).length
+        : null;
+      events.emit("sse", key, "finding-scan", {
+        findingScan: updated.findingScan,
+        findingReviewRemaining,
+        reviewedPaths,
+      });
+      res.json({ scan: updated.findingScan, reviewed: updated.findingScan?.fingerprints.length ?? 0 });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/agent/sessions/:key/answer", async (req, res, next) => {
     try {
       const key = String(req.params.key);
@@ -724,6 +768,10 @@ export function registerRoutes(deps) {
         res.status(404).type("text/plain").send("No review session for that link. Re-run pr-review-canvas.");
         return;
       }
+      if (session.status === "ended") {
+        res.status(410).type("text/plain").send("This review has ended. Reopen it with pr-review-canvas --reopen.");
+        return;
+      }
       const snapshot = await store.loadSnapshot(session.key);
       if (!snapshot) {
         res.status(409).type("text/plain").send("The diff for this session is missing. Re-run pr-review-canvas.");
@@ -761,8 +809,12 @@ export function registerRoutes(deps) {
         return;
       }
       const existing = await store.loadThreads(session.key);
+      const snapshot = await store.loadSnapshot(session.key);
       res.json({
-        session: publicSession(session),
+        session: {
+          ...publicSession(session),
+          findingReviewRemaining: snapshot ? unreviewedFindingScopes(snapshot, session.findingReviewed).length : null,
+        },
         presence: computePresence(session.key),
         existing: existing ?? { threads: [], graphqlAvailable: true, graphqlError: null },
       });
@@ -1042,6 +1094,48 @@ export function registerRoutes(deps) {
       events.emit("work", found.session.key);
       events.emit("sse", found.session.key, "chat-message", { message });
       res.json({ message });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/ui/s/:aid/findings/request", async (req, res, next) => {
+    try {
+      const found = await requireSession(req, res);
+      if (!found) return;
+      if (found.session.findingScan && found.session.findingScan.status !== "completed") {
+        res.status(409).json({ error: "The agent already has a finding scan in progress." });
+        return;
+      }
+      const scopes = unreviewedFindingScopes(found.snapshot, found.session.findingReviewed);
+      if (scopes.length === 0) {
+        res.json({ scan: null, remaining: 0 });
+        return;
+      }
+      const at = new Date().toISOString();
+      const scan = {
+        id: newId("fs"),
+        headSha: found.snapshot.headSha,
+        fingerprints: scopes.map((scope) => scope.fingerprint),
+        findingCountAtStart: found.session.findings.length,
+        status: /** @type {const} */ ("queued"),
+        requestedAt: at,
+        startedAt: null,
+        completedAt: null,
+      };
+      const updated = await store.mutate(found.session.key, {
+        op: "finding:scan-request",
+        at,
+        payload: { scan },
+      });
+      await store.mutate(found.session.key, {
+        op: "work:add",
+        at,
+        payload: { item: { uid: newId("w"), kind: "findings_requested", at, ref: scan.id } },
+      });
+      events.emit("work", found.session.key);
+      events.emit("sse", found.session.key, "finding-scan", { findingScan: updated.findingScan });
+      res.status(202).json({ scan: updated.findingScan, remaining: scopes.length });
     } catch (error) {
       next(error);
     }
@@ -1787,18 +1881,6 @@ export function registerRoutes(deps) {
       }
       const openQuestions = session.threads.filter((thread) => thread.status === "open").length;
       const openFindings = session.findings.filter((finding) => finding.status === "open").length;
-      const staleFindings = session.findings.filter(
-        (finding) => finding.status === "open" && finding.headSha !== session.snapshotHeadSha,
-      ).length;
-      const risk = session.findings
-        .filter((finding) => finding.status === "open" && finding.headSha === session.snapshotHeadSha)
-        .reduce(
-          (counts, finding) => {
-            counts[finding.severity] += 1;
-            return counts;
-          },
-          { low: 0, medium: 0, high: 0, critical: 0 },
-        );
       const draftComments = session.comments.filter((comment) => comment.state === "draft").length;
       const staleDrafts = session.comments.filter((comment) => comment.state === "stale").length;
       const files = snapshot?.files.length ?? 0;
@@ -1825,8 +1907,6 @@ export function registerRoutes(deps) {
         viewedFiles,
         openQuestions,
         openFindings,
-        staleFindings,
-        risk,
         draftComments,
         staleDrafts,
         alerts: session.alerts.length,
@@ -1892,7 +1972,6 @@ export function registerRoutes(deps) {
     if (input.session.alerts.length) return "Resolve session alert";
     if (input.staleDrafts) return "Decide stale anchors";
     if (input.openQuestions) return "Waiting for agent answers";
-    if (input.openFindings) return "Triage agent findings";
     if (input.viewedFiles < input.files) return "Continue reviewing files";
     if (input.draftComments) return "Choose verdict and submit";
     return "Ready for final review";
@@ -2094,7 +2173,32 @@ export function registerRoutes(deps) {
         text: /** @type {any} */ (entry).text,
         at: /** @type {any} */ (entry).at,
       }));
-    const enriched = messages.length > 0 ? { ...result, messages } : result;
+    let enriched = messages.length > 0 ? { ...result, messages } : result;
+
+    const findingRequest = items.find((item) => item.kind === "findings_requested");
+    let activeFindingScan = withChat.findingScan;
+    if (findingRequest && activeFindingScan && activeFindingScan.id === findingRequest.ref) {
+      if (activeFindingScan.status === "queued") {
+        const scanId = activeFindingScan.id;
+        const started = await store.mutate(key, {
+          op: "finding:scan-start",
+          at: new Date().toISOString(),
+          payload: { id: scanId },
+        });
+        activeFindingScan = started.findingScan;
+        events.emit("sse", key, "finding-scan", { findingScan: activeFindingScan });
+      }
+      if (!activeFindingScan) return enriched;
+      const scan = /** @type {NonNullable<typeof activeFindingScan>} */ (activeFindingScan);
+      const snapshot = await store.loadSnapshot(key);
+      if (snapshot) {
+        const assigned = new Set(scan.fingerprints);
+        const scopes = unreviewedFindingScopes(snapshot, withChat.findingReviewed).filter((scope) =>
+          assigned.has(scope.fingerprint),
+        );
+        enriched = { ...enriched, findingScan: { id: scan.id, headSha: snapshot.headSha, scopes } };
+      }
+    }
 
     const questionItems = items.filter((item) => item.kind === "question" || item.kind === "question_followup");
     if (questionItems.length === 0) return enriched;
@@ -2187,6 +2291,7 @@ export function publicSession(session) {
     prefs: session.prefs,
     alerts: session.alerts,
     findings: session.findings,
+    findingScan: session.findingScan,
     prerenderCount: PRERENDER_FILE_COUNT,
   };
 }

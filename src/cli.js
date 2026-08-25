@@ -299,6 +299,7 @@ export function createPollOutput(ref, response) {
   const alertList = Array.isArray(response.alerts) ? response.alerts : [];
   /** @type {Array<{ id: string, text: string, at: string }>} */
   const messages = Array.isArray(response.messages) ? response.messages : [];
+  const findingScan = response.findingScan;
   // Rides along with whatever else this poll carries rather than pre-empting it: an alert says the
   // session is in trouble, which is context for the work, not a replacement for it.
   const alerts = alertList.length
@@ -350,6 +351,32 @@ export function createPollOutput(ref, response) {
         `Run \`${BIN} submit ${label} --token <token>\` now. Do not alter the comments — the user approved ` +
         `exactly this text. If it fails validation, report the listed path:line back to them and wait for ` +
         `them to fix the anchors in the browser.${alertStep}`,
+    };
+  }
+
+  if (findingScan?.id) {
+    const scopes = Array.isArray(findingScan.scopes) ? findingScan.scopes : [];
+    return {
+      session: { ref: label, status: "feedback" },
+      ...alerts,
+      action: "find_findings",
+      finding_scan: {
+        id: findingScan.id,
+        head_sha: findingScan.headSha,
+        files: scopes.map((/** @type {any} */ scope) => ({
+          path: scope.path,
+          additions: scope.additions,
+          deletions: scope.deletions,
+          patch_availability: scope.patchAvailability,
+          patch: scope.rawPatch,
+        })),
+      },
+      next_step:
+        `The user explicitly asked you to inspect only the files in finding_scan.files. Review those patches for ` +
+        `concrete correctness, security, or regression risks; do not re-scan other files and do not draft review ` +
+        `prose. Surface each useful result with \`${BIN} finding add ${label} ...\`. When every listed file has ` +
+        `been inspected, run \`${BIN} finding complete ${label} --scan ${findingScan.id}\` so unchanged evidence ` +
+        `is skipped next time. Then poll again.`,
     };
   }
 
@@ -1048,8 +1075,21 @@ async function openWorkspaceMembers(refs) {
 
 /** @param {string[]} args */
 async function findingCommand(args) {
+  if (args[0] === "complete") {
+    const commandArgs = args.slice(1);
+    const { ref, key, base } = await locateSession(commandArgs);
+    const scanId = flagValue(commandArgs, "--scan");
+    if (!scanId) throw new AxiError("finding complete needs --scan", "VALIDATION_ERROR", []);
+    const result = /** @type {any} */ (
+      await postJson(`${base}/api/agent/sessions/${key}/findings/complete`, { scanId })
+    );
+    return {
+      finding_scan: { id: scanId, reviewed: result.reviewed, status: "completed" },
+      next_step: `Run \`${BIN} poll ${displayRef(ref)}\` to keep listening.`,
+    };
+  }
   if (args[0] !== "add") {
-    throw new AxiError("finding currently supports only `add`", "VALIDATION_ERROR", [
+    throw new AxiError("finding supports `add` or `complete`", "VALIDATION_ERROR", [
       `Run \`${BIN} finding add <pr> --title "..." --body-file -\``,
     ]);
   }
@@ -1242,6 +1282,7 @@ const COMMAND_HELP = {
   finding: [
     `${BIN} finding add <pr> --title "..." (--body "..." | --body-file <path> | --body-file -)`,
     `  [--severity low|medium|high|critical] [--confidence 0..1] [--path file --side LEFT|RIGHT --line N]`,
+    `${BIN} finding complete <pr> --scan <id>`,
     "",
     "A finding is agent analysis for the reviewer. It can never enter a GitHub review payload.",
     "",

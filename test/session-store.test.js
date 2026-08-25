@@ -675,6 +675,38 @@ test("agent findings persist separately and never become review comments", async
   });
 });
 
+test("completed finding scans journal reviewed evidence without changing review prose", async () => {
+  await withStore(async ({ store }) => {
+    await seed(store);
+    const scan = {
+      id: "fs_1",
+      headSha: "sha-head",
+      fingerprints: ["patch-fingerprint"],
+      findingCountAtStart: 0,
+      status: /** @type {const} */ ("queued"),
+      requestedAt: "t1",
+      startedAt: null,
+      completedAt: null,
+    };
+    await store.mutate(KEY, { op: "finding:scan-request", at: "t1", payload: { scan } });
+    await store.mutate(KEY, { op: "finding:scan-start", at: "t2", payload: { id: scan.id } });
+    await store.mutate(KEY, { op: "finding:scan-complete", at: "t3", payload: { id: scan.id } });
+    store.invalidate();
+    const loaded = await store.load(KEY);
+    assert.equal(loaded?.findingScan?.status, "completed");
+    assert.equal(loaded?.findingScan?.startedAt, "t2");
+    assert.deepEqual(loaded?.findingReviewed["patch-fingerprint"], { at: "t3", headSha: "sha-head" });
+    assert.deepEqual(loaded?.comments, []);
+
+    await store.mutate(KEY, { op: "finding:review-reset", at: "t4", payload: {} });
+    store.invalidate();
+    const reset = await store.load(KEY);
+    assert.deepEqual(reset?.findingReviewed, {});
+    assert.equal(reset?.findingScan, null);
+    assert.deepEqual(reset?.comments, []);
+  });
+});
+
 test("a snapshot survives a round trip and its path index is rebuilt", async () => {
   await withStore(async ({ store }) => {
     await seed(store);
