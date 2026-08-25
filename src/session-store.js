@@ -124,7 +124,7 @@ const INDEX_LOCK = "@index";
 /**
  * @typedef {object} WorkItem
  * @property {string} uid
- * @property {"question" | "question_followup" | "message" | "submit_requested"} kind
+ * @property {"question" | "question_followup" | "message" | "submit_requested" | "findings_requested"} kind
  * @property {string} at
  * @property {string} [ref] the thread id this item refers to
  */
@@ -167,6 +167,8 @@ const INDEX_LOCK = "@index";
  * @property {SessionAlert[]} alerts
  * @property {ChatMessage[]} chat
  * @property {AgentFinding[]} findings
+ * @property {Record<string, { at: string, headSha: string }>} findingReviewed fingerprints of diff evidence already scanned
+ * @property {{ id: string, headSha: string, fingerprints: string[], findingCountAtStart: number | null, status: "queued" | "reviewing" | "completed", requestedAt: string, startedAt: string | null, completedAt: string | null } | null} findingScan
  * @property {string} createdAt
  * @property {string} updatedAt
  */
@@ -214,6 +216,8 @@ export function emptySession(key, accessId) {
     alerts: [],
     chat: [],
     findings: [],
+    findingReviewed: {},
+    findingScan: null,
     createdAt: at,
     updatedAt: at,
   };
@@ -472,6 +476,41 @@ export function applyOp(session, entry) {
       }
       break;
     }
+    case "finding:scan-request":
+      next.findingScan = {
+        ...payload.scan,
+        // Journals written by the first findings build used `requested` for both waiting and active.
+        // Treat it as queued on replay so the UI never claims an agent has work it has not received.
+        status: payload.scan?.status === "requested" ? "queued" : payload.scan?.status,
+        findingCountAtStart: Number.isInteger(payload.scan?.findingCountAtStart)
+          ? payload.scan.findingCountAtStart
+          : null,
+        startedAt: payload.scan?.startedAt ?? null,
+      };
+      break;
+    case "finding:scan-start": {
+      const scan = next.findingScan;
+      if (!scan || scan.id !== payload.id || scan.status !== "queued") break;
+      scan.status = "reviewing";
+      scan.startedAt = entry.at;
+      break;
+    }
+    case "finding:scan-complete": {
+      const scan = next.findingScan;
+      if (!scan || scan.id !== payload.id) break;
+      for (const fingerprint of scan.fingerprints) {
+        next.findingReviewed[fingerprint] = { at: entry.at, headSha: scan.headSha };
+      }
+      scan.status = "completed";
+      scan.completedAt = entry.at;
+      break;
+    }
+    case "finding:review-reset":
+      // A local test reset clears only agent-review bookkeeping. Findings and, most importantly,
+      // the human's review prose remain untouched, and replay follows the same path as the live reset.
+      next.findingReviewed = {};
+      next.findingScan = null;
+      break;
     case "alert:add":
       next.alerts.push(payload.alert);
       break;
@@ -1012,6 +1051,17 @@ export function normalizeSession(session, key) {
   for (const alert of session.alerts) alert.id ??= newId("al");
   session.chat ??= [];
   session.findings ??= [];
+  session.findingReviewed ??= {};
+  session.findingScan ??= null;
+  if (session.findingScan) {
+    const storedScan =
+      /** @type {typeof session.findingScan & { status: string, findingCountAtStart?: number | null, startedAt?: string | null }} */ (
+        session.findingScan
+      );
+    if (String(storedScan.status) === "requested") storedScan.status = "queued";
+    storedScan.findingCountAtStart ??= null;
+    storedScan.startedAt ??= null;
+  }
   session.viewed ??= {};
   session.prefs ??= {};
   session.localRepos ??= [];

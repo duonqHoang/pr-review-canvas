@@ -1,4 +1,5 @@
 import { fileAnchorId } from "../anchor/file-anchor.js";
+import { findingScopeFingerprint, unreviewedFindingScopes } from "../finding-scan.js";
 import { escapeHtml, jsonScript } from "../shared/escape.js";
 import { filePanelHtml } from "../shared/diff-rows.js";
 
@@ -68,6 +69,29 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
   // opposite of their OS never sees the other theme flash before the bundle has loaded.
   const theme = THEMES.includes(String(session.prefs?.theme)) ? String(session.prefs?.theme) : "system";
   const themeLabel = theme === "system" ? "Auto" : theme === "dark" ? "Dark" : "Light";
+  const findingReviewRemaining = unreviewedFindingScopes(snapshot, session.findingReviewed).length;
+  const findingReviewState =
+    session.findingScan?.status === "queued"
+      ? "queued"
+      : session.findingScan?.status === "reviewing"
+        ? "reviewing"
+        : findingReviewRemaining === 0
+          ? "complete"
+          : "ready";
+  const findingReviewFileCount = session.findingScan?.fingerprints.length ?? 0;
+  const findingReviewAdded = Number.isInteger(session.findingScan?.findingCountAtStart)
+    ? Math.max(0, session.findings.length - /** @type {number} */ (session.findingScan?.findingCountAtStart))
+    : null;
+  const findingReviewLabel =
+    findingReviewState === "queued"
+      ? `Waiting for agent · ${findingReviewFileCount} ${findingReviewFileCount === 1 ? "file" : "files"}`
+      : findingReviewState === "reviewing"
+        ? `Reviewing ${findingReviewFileCount} ${findingReviewFileCount === 1 ? "file" : "files"}…`
+        : findingReviewState === "complete"
+          ? findingReviewFileCount > 0
+            ? `Reviewed ${findingReviewFileCount} ${findingReviewFileCount === 1 ? "file" : "files"}${findingReviewAdded === null ? "" : findingReviewAdded === 0 ? " · No findings" : ` · ${findingReviewAdded} ${findingReviewAdded === 1 ? "finding" : "findings"}`}`
+            : "Agent review complete"
+          : "Run agent review";
 
   /**
    * Whether a file counts as viewed **right now**.
@@ -129,6 +153,7 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
       // recipe also removes any chance of the two disagreeing.
       anchorId: fileAnchorId(file.path),
       hunkCount: file.hunks.length,
+      agentReviewed: Boolean(session.findingReviewed[findingScopeFingerprint(file)]),
     })),
     layout,
     prefs: session.prefs,
@@ -149,6 +174,8 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
     // conversation the user loses on every reload.
     chat: session.chat,
     findings: session.findings,
+    findingScan: session.findingScan,
+    findingReviewRemaining,
   };
 
   const panels = snapshot.files
@@ -200,12 +227,36 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
   </div>
 </header>
 
-<nav class="prc-view-tabs" data-prc-chrome role="tablist" aria-label="Pull request view">
-  <button id="prcReviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="true" tabindex="0"
-    aria-controls="prcReviewView">Review <span>${snapshot.counts.files}</span></button>
-  <button id="prcOverviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="false" tabindex="-1"
-    aria-controls="prcOverview">Overview <span>${prCommits.length}</span></button>
-</nav>
+<div class="prc-viewbar" data-prc-chrome>
+  <nav class="prc-view-tabs" role="tablist" aria-label="Pull request view">
+    <button id="prcReviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="true" tabindex="0"
+      aria-controls="prcReviewView">Review <span>${snapshot.counts.files}</span></button>
+    <button id="prcOverviewTab" class="prc-view-tab" type="button" role="tab" aria-selected="false" tabindex="-1"
+      aria-controls="prcOverview">Overview <span>${prCommits.length}</span></button>
+  </nav>
+  <div class="prc-agent-actions" aria-label="Agent actions">
+    <button class="prc-btn prc-findings-request" id="prcRequestFindings" type="button"
+      aria-describedby="prcFindingsRequestHint" data-review-state="${findingReviewState}"
+      aria-busy="${findingReviewState === "reviewing" ? "true" : "false"}"
+      title="${findingReviewState === "queued" ? "Waiting for a connected agent to pick up this review" : findingReviewState === "reviewing" ? "The agent is reviewing unchecked files" : findingReviewState === "complete" ? "All unchanged files have been reviewed" : "Review files the agent hasn't checked yet"}"
+      ${findingReviewState !== "ready" ? "disabled" : ""}><svg class="prc-icon prc-agent-review-ready-icon" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4M11 8v6M8 11h6"></path></svg>
+      <svg class="prc-icon prc-agent-review-complete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+      <span>${findingReviewLabel}</span>
+      <span class="prc-counter" id="prcToolbarFindingsCount" aria-label="Open findings">${session.findings.filter((finding) => finding.status === "open").length}</span></button>
+    <span id="prcFindingsRequestHint" class="prc-sr-only">Ask the agent to inspect only diff files it has not reviewed before.</span>
+    <button class="prc-btn prc-chat-toggle" id="prcToggleChat" type="button" aria-expanded="false"
+      aria-controls="prcChat" title="Show or hide the chat with your agent (g)">
+      <svg class="prc-chat-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+      </svg>
+      <span>Chat</span>
+    </button>
+  </div>
+</div>
 
 <div class="prc-toolbar" id="prcReviewToolbar" data-prc-chrome>
   <div class="prc-toolbar-context">
@@ -244,16 +295,6 @@ export function renderReviewPage({ session, snapshot, clientScript, version, thr
         <a href="${escapeHtml(session.pr.url)}" target="_blank" rel="noreferrer noopener">Open on GitHub</a>
       </div>
     </details>
-  <!-- Last, on the right: the panel it opens is the right-hand column, so the control sits on the side
-       the thing appears. -->
-    <button class="prc-btn prc-chat-toggle" id="prcToggleChat" type="button" aria-expanded="false"
-      aria-controls="prcChat" title="Show or hide the chat with your agent (g)">
-      <svg class="prc-chat-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-      </svg>
-      <span>Chat</span>
-    </button>
   </div>
 </div>
 

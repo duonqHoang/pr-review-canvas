@@ -80,6 +80,8 @@ const state = {
   /** @type {any[]} */
   chat: Array.isArray(bootstrap.chat) ? bootstrap.chat : [],
   findings: Array.isArray(bootstrap.findings) ? bootstrap.findings : [],
+  findingScan: bootstrap.findingScan ?? null,
+  findingReviewRemaining: Number.isInteger(bootstrap.findingReviewRemaining) ? bootstrap.findingReviewRemaining : null,
   chatOpen: false,
   /** Agent replies that arrived while the panel was closed. */
   unreadChat: 0,
@@ -1825,6 +1827,9 @@ function renderFindings() {
   const findings = /** @type {any[]} */ (state.findings).filter((finding) => finding.status === "open");
   host.hidden = findings.length === 0;
   count.textContent = `${findings.length} agent finding${findings.length === 1 ? "" : "s"}`;
+  const toolbarCount = el("prcToolbarFindingsCount");
+  if (toolbarCount) toolbarCount.textContent = String(findings.length);
+  renderFindingRequest();
   list.replaceChildren();
   for (const finding of findings) {
     const card = document.createElement("article");
@@ -1850,6 +1855,62 @@ function renderFindings() {
     );
     card.append(title, where, body, actions);
     list.append(card);
+  }
+}
+
+function renderFindingRequest() {
+  const button = /** @type {HTMLButtonElement | null} */ (el("prcRequestFindings"));
+  if (!button) return;
+  const queued = state.findingScan?.status === "queued";
+  const reviewing = state.findingScan?.status === "reviewing";
+  const complete = !queued && !reviewing && state.findingReviewRemaining === 0;
+  const fileCount = state.findingScan?.fingerprints?.length ?? 0;
+  const findingCountAtStart = state.findingScan?.findingCountAtStart;
+  const findingsAdded = Number.isInteger(findingCountAtStart)
+    ? Math.max(0, state.findings.length - findingCountAtStart)
+    : null;
+  button.disabled = queued || reviewing || complete || state.status === "ended";
+  button.setAttribute("aria-busy", reviewing ? "true" : "false");
+  button.dataset.reviewState = queued ? "queued" : reviewing ? "reviewing" : complete ? "complete" : "ready";
+  button.title = queued
+    ? "Waiting for a connected agent to pick up this review"
+    : reviewing
+      ? "The agent is reviewing unchecked files"
+      : complete
+        ? "All unchanged files have been reviewed"
+        : "Review files the agent hasn't checked yet";
+  const label = button.querySelector("span");
+  if (label) {
+    label.textContent = queued
+      ? `Waiting for agent · ${fileCount} ${fileCount === 1 ? "file" : "files"}`
+      : reviewing
+        ? `Reviewing ${fileCount} ${fileCount === 1 ? "file" : "files"}…`
+        : complete
+          ? fileCount > 0
+            ? `Reviewed ${fileCount} ${fileCount === 1 ? "file" : "files"}${findingsAdded === null ? "" : findingsAdded === 0 ? " · No findings" : ` · ${findingsAdded} ${findingsAdded === 1 ? "finding" : "findings"}`}`
+            : "Agent review complete"
+          : "Run agent review";
+  }
+}
+
+async function requestFindings() {
+  const button = /** @type {HTMLButtonElement | null} */ (el("prcRequestFindings"));
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  try {
+    const result = await request("/findings/request", { method: "POST", body: "{}" });
+    state.findingScan = result.scan;
+    state.findingReviewRemaining = Number(result.remaining);
+    renderFindingRequest();
+    toast(
+      result.remaining
+        ? `Agent queued to review ${result.remaining} unreviewed file(s).`
+        : "The agent has reviewed every unchanged file.",
+    );
+  } catch (error) {
+    renderFindingRequest();
+    toast(`Could not request findings: ${error instanceof Error ? error.message : error}`);
   }
 }
 
@@ -2167,6 +2228,12 @@ function treeFileRow(entry, label) {
   ).length;
   if (drafts > 0) marks.append(chip(String(drafts), "prc-chip-draft"));
   if (questions > 0) marks.append(chip("?", "prc-chip-question"));
+  if (entry.agentReviewed) {
+    const reviewed = chip("A", "prc-chip-agent-reviewed");
+    reviewed.title = "Agent reviewed this version of the file";
+    reviewed.setAttribute("aria-label", "Agent reviewed this version of the file");
+    marks.append(reviewed);
+  }
   if (entry.viewed) marks.append(chip("✓", "prc-chip-viewed"));
   row.append(glyph, name, stat, marks);
   return row;
@@ -2185,9 +2252,11 @@ function treeFileRow(entry, label) {
  */
 function syncChromeHeight() {
   const header = document.querySelector(".prc-header");
+  const viewbar = document.querySelector(".prc-viewbar");
   const toolbar = document.querySelector(".prc-toolbar");
   if (!header) return;
   const headerHeight = Math.round(header.getBoundingClientRect().height);
+  const viewbarHeight = viewbar ? Math.round(viewbar.getBoundingClientRect().height) : 0;
   const toolbarHeight = toolbar ? Math.round(toolbar.getBoundingClientRect().height) : 0;
   const root = document.documentElement;
   // The review bar is fixed to the bottom, so it covers whatever the sticky columns extend under.
@@ -2208,12 +2277,15 @@ function syncChromeHeight() {
     const asideTop = Math.round(layout.getBoundingClientRect().top + window.scrollY);
     if (asideTop > 0) root.style.setProperty("--prc-aside-top", `${asideTop}px`);
   }
-  // Two offsets, because two things stick: the toolbar sits under the header, and everything below
-  // both — file headers, the tree, the chat panel, every scroll-margin — sits under the pair. One
-  // combined number would put a file header behind the toolbar, which is the bug the measured
-  // approach exists to prevent in the first place.
-  if (headerHeight > 0) root.style.setProperty("--prc-toolbar-top", `${headerHeight}px`);
-  if (headerHeight + toolbarHeight > 0) root.style.setProperty("--prc-chrome-h", `${headerHeight + toolbarHeight}px`);
+  // Three measured layers stick in sequence. Each needs the sum of the layers before it; the final
+  // sum is where file headers, sidebars and scroll targets begin.
+  if (headerHeight > 0) root.style.setProperty("--prc-viewbar-top", `${headerHeight}px`);
+  if (headerHeight + viewbarHeight > 0) {
+    root.style.setProperty("--prc-toolbar-top", `${headerHeight + viewbarHeight}px`);
+  }
+  if (headerHeight + viewbarHeight + toolbarHeight > 0) {
+    root.style.setProperty("--prc-chrome-h", `${headerHeight + viewbarHeight + toolbarHeight}px`);
+  }
 }
 
 function watchChromeHeight() {
@@ -2225,6 +2297,7 @@ function watchChromeHeight() {
     const observer = new ResizeObserver(syncChromeHeight);
     for (const node of [
       document.querySelector(".prc-header"),
+      document.querySelector(".prc-viewbar"),
       document.querySelector(".prc-toolbar"),
       // The bar grows when a draft count appears in it, and that changes how much of the viewport the
       // sticky columns may use.
@@ -3284,6 +3357,27 @@ function connectEvents() {
     if (finding?.id) upsertById(state.findings, finding);
     renderFindings();
   });
+  events.addEventListener("finding-scan", (event) => {
+    const payload = JSON.parse(/** @type {MessageEvent} */ (event).data);
+    state.findingScan = payload.findingScan ?? null;
+    if (Number.isInteger(payload.findingReviewRemaining)) {
+      state.findingReviewRemaining = payload.findingReviewRemaining;
+    }
+    for (const path of payload.reviewedPaths ?? []) {
+      const file = state.files.find((/** @type {any} */ candidate) => candidate.path === path);
+      if (file) file.agentReviewed = true;
+    }
+    renderFindingRequest();
+    renderTree();
+    if (state.findingScan?.status === "completed") {
+      const reviewed = state.findingScan.fingerprints?.length ?? 0;
+      const before = state.findingScan.findingCountAtStart;
+      const added = Number.isInteger(before) ? Math.max(0, state.findings.length - before) : null;
+      toast(
+        `Reviewed ${reviewed} ${reviewed === 1 ? "file" : "files"}${added === null ? "" : added === 0 ? " · No findings" : ` · ${added} ${added === 1 ? "finding" : "findings"}`}. Unchanged files will be skipped next time.`,
+      );
+    }
+  });
   events.addEventListener("state-sync", (event) => {
     const data = JSON.parse(/** @type {MessageEvent} */ (event).data);
     applyServerState(data);
@@ -3709,6 +3803,7 @@ function applyServerState(data) {
   if (Array.isArray(data.threads)) state.threads = data.threads;
   if (Array.isArray(data.replies)) state.replies = data.replies;
   if (Array.isArray(data.findings)) state.findings = data.findings;
+  if (Number.isInteger(data.findingReviewRemaining)) state.findingReviewRemaining = data.findingReviewRemaining;
   if (data.status) state.status = data.status;
   // Nothing to announce on a plain state sync: `chat-message` is what says a reply just arrived, and
   // treating a reconnect's hydration as new mail would re-announce the same message on every refetch.
@@ -3944,6 +4039,7 @@ el("prcDraftsToggle")?.addEventListener("click", () => {
 el("prcToggleChat")?.addEventListener("click", () => toggleChat());
 el("prcChatClose")?.addEventListener("click", () => toggleChat(false));
 el("prcChatSend")?.addEventListener("click", () => sendChatMessage());
+el("prcRequestFindings")?.addEventListener("click", () => requestFindings());
 el("prcChatText")?.addEventListener("keydown", (event) => {
   // Cmd/Ctrl+Enter, the same key every other composer here uses. Plain Enter inserts a newline,
   // because a question about a diff runs to several lines more often than not.

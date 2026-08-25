@@ -128,7 +128,13 @@ test("a nominal height is never used as a sticky offset", () => {
 });
 
 /** The offsets the client measures at runtime. Anything else used as a `top` is a guess. */
-const MEASURED_OFFSETS = ["--prc-chrome-h", "--prc-toolbar-top", "--prc-footer-h", "--prc-aside-top"];
+const MEASURED_OFFSETS = [
+  "--prc-chrome-h",
+  "--prc-viewbar-top",
+  "--prc-toolbar-top",
+  "--prc-footer-h",
+  "--prc-aside-top",
+];
 
 test("every sticky offset comes from a variable the client measures", () => {
   // The general form of the bug above, which the earlier version of this test only caught for one
